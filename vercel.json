@@ -1,0 +1,9 @@
+{
+  "crons": [
+    { "path": "/api/cron/treasury-curve", "schedule": "30 21 * * 1-5" },
+    { "path": "/api/cron/eod-snapshot", "schedule": "45 21 * * 1-5" },
+    { "path": "/api/cron/votes", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/stale-marks", "schedule": "0 12 * * 1" },
+    { "path": "/api/cron/backup", "schedule": "0 8 * * *" }
+  ]
+}

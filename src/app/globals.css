@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+:root {
+  /* SMIF brand — dark theme (default) */
+  --smif-red: #ba0c2f;        /* UGA red — Athena accent, bull */
+  --smif-red-light: #d63a56;
+  --smif-red-dark: #8f0a24;
+  --smif-gray: #808285;       /* bear gray */
+  --smif-gold: #ce9c5c;       /* Arch accent */
+  --smif-gold-light: #d9b37a;
+  --smif-gold-dark: #b58844;
+
+  --background: #0b0b0d;
+  --foreground: #f2efea;
+  --card: rgba(255, 255, 255, 0.05);
+  --card-solid: #141417;
+  --card-border: rgba(255, 255, 255, 0.09);
+  --sidebar: #060607;
+  --accent: var(--smif-red);
+  --accent-hover: var(--smif-red-light);
+  --accent-soft: rgba(186, 12, 47, 0.14);
+  --gain: #22c55e;
+  --loss: #ef4444;
+  --muted: rgba(242, 239, 234, 0.55);
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --input-border: rgba(255, 255, 255, 0.15);
+  --highlight: rgba(255, 255, 255, 0.05);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-shadow: none;
+  --scrollbar-thumb: rgba(128, 130, 133, 0.3);
+  --scrollbar-thumb-hover: rgba(128, 130, 133, 0.5);
+  --sticky: rgba(11, 11, 13, 0.85);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --background: #f8f6f2;
+  --foreground: #1c1b1a;
+  --card: rgba(28, 27, 26, 0.04);
+  --card-solid: #ffffff;
+  --card-border: rgba(28, 27, 26, 0.12);
+  --sidebar: #ffffff;
+  --accent-soft: rgba(186, 12, 47, 0.09);
+  --gain: #15803d;
+  --loss: #b91c1c;
+  --muted: rgba(28, 27, 26, 0.58);
+  --input-bg: rgba(28, 27, 26, 0.04);
+  --input-border: rgba(28, 27, 26, 0.18);
+  --highlight: rgba(28, 27, 26, 0.05);
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(28, 27, 26, 0.1);
+  --glass-shadow: 0 4px 24px rgba(28, 27, 26, 0.07);
+  --scrollbar-thumb: rgba(128, 130, 133, 0.35);
+  --scrollbar-thumb-hover: rgba(128, 130, 133, 0.55);
+  --sticky: rgba(248, 246, 242, 0.9);
+  color-scheme: light;
+}
+
+/* Fund accent: set data-fund on a layout wrapper (or html) */
+[data-fund="athena"] {
+  --accent: var(--smif-red);
+  --accent-hover: var(--smif-red-light);
+  --accent-soft: rgba(186, 12, 47, 0.14);
+}
+
+[data-fund="arch"] {
+  --accent: var(--smif-gold);
+  --accent-hover: var(--smif-gold-light);
+  --accent-soft: rgba(206, 156, 92, 0.14);
+}
+
+:root[data-theme="light"] [data-fund="arch"] {
+  --accent: var(--smif-gold-dark);
+  --accent-hover: #9a7434;
+  --accent-soft: rgba(181, 136, 68, 0.12);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-solid: var(--card-solid);
+  --color-card-border: var(--card-border);
+  --color-sidebar: var(--sidebar);
+  --color-smif-red: var(--smif-red);
+  --color-smif-gray: var(--smif-gray);
+  --color-smif-gold: var(--smif-gold);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
+  --color-muted: var(--muted);
+  --color-input-bg: var(--input-bg);
+  --color-input-border: var(--input-border);
+  --color-highlight: var(--highlight);
+  --color-sticky: var(--sticky);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Financial figures line up in columns */
+.tabular-nums,
+table td,
+table th {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: var(--glass-shadow);
+}
+
+body,
+.glass-card {
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Skeleton shimmer for loading states */
+.skeleton {
+  background: var(--highlight);
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--card-border),
+    transparent
+  );
+  animation: skeleton-shimmer 1.6s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

@@ -1,0 +1,196 @@
+// Single source of truth for the permission matrix (spec Section 6).
+// The RLS policies in supabase/migrations mirror this table; if you change a
+// row here, change the matching SQL helper/policy in the same commit.
+
+import type { FundContext, MembershipRole } from "@/types/domain";
+
+export type PermissionAction =
+  | "view_fund"
+  | "view_individual_votes"
+  | "draft_pitch"
+  | "submit_pitch"
+  | "schedule_pitch"
+  | "cast_vote"
+  | "withdraw_pitch"
+  | "create_ticket"
+  | "execute_ticket"
+  | "manage_holdings"
+  | "set_sector_targets"
+  | "manage_fund_settings"
+  | "manage_roster"
+  | "reset_member_password"
+  | "post_updates"
+  | "record_attendance"
+  | "trigger_backup"
+  | "view_audit_log"
+  | "grant_app_admin";
+
+export const OFFICER_ROLES: MembershipRole[] = [
+  "president",
+  "vice_president",
+  "portfolio_manager",
+  "alumni_relations",
+];
+
+/** Effective role: alumni and inactive memberships act as viewer. */
+export function effectiveRole(ctx: FundContext): MembershipRole | null {
+  if (!ctx.membership) return null;
+  if (ctx.membership.status !== "active") return "viewer";
+  return ctx.membership.role;
+}
+
+export function isOfficer(ctx: FundContext): boolean {
+  if (ctx.isAppAdmin) return true;
+  const role = effectiveRole(ctx);
+  return role !== null && OFFICER_ROLES.includes(role);
+}
+
+export function isPM(ctx: FundContext): boolean {
+  return effectiveRole(ctx) === "portfolio_manager";
+}
+
+export function canExecute(ctx: FundContext): boolean {
+  return isPM(ctx) || ctx.isFacultyAdvisor || ctx.isAppAdmin;
+}
+
+/** Active member (not viewer, not alumni) — the voting population. */
+export function isActiveVoter(ctx: FundContext): boolean {
+  return (
+    ctx.membership !== null &&
+    ctx.membership.status === "active" &&
+    ctx.membership.role !== "viewer" &&
+    !ctx.isAppAdmin // admins are not students and never vote
+  );
+}
+
+export function leadsSector(ctx: FundContext, sectorId: string): boolean {
+  return (
+    ctx.membership !== null &&
+    ctx.membership.status === "active" &&
+    ctx.membership.is_sector_leader &&
+    ctx.membership.sector_id === sectorId
+  );
+}
+
+export function inSector(ctx: FundContext, sectorId: string): boolean {
+  return (
+    ctx.membership !== null &&
+    ctx.membership.status === "active" &&
+    ctx.membership.sector_id === sectorId
+  );
+}
+
+/**
+ * The permission matrix. `sectorId` scopes sector-bound actions
+ * (draft/submit/withdraw pitch, set targets for a strategy team's leader).
+ */
+export function can(
+  ctx: FundContext,
+  action: PermissionAction,
+  opts: { sectorId?: string; isStrategySector?: boolean } = {}
+): boolean {
+  const role = effectiveRole(ctx);
+  const officer = isOfficer(ctx);
+
+  switch (action) {
+    case "view_fund":
+      return (
+        ctx.isAppAdmin || ctx.isFacultyAdvisor || ctx.membership !== null
+      );
+
+    case "view_individual_votes":
+      return officer || ctx.isFacultyAdvisor || ctx.isAppAdmin;
+
+    case "draft_pitch":
+      if (ctx.isAppAdmin) return true;
+      if (ctx.isFacultyAdvisor) return false;
+      if (officer) return true; // officers: any sector
+      if (!role || role === "viewer") return false;
+      return opts.sectorId ? inSector(ctx, opts.sectorId) : true;
+
+    case "submit_pitch":
+      if (ctx.isAppAdmin) return true;
+      if (ctx.isFacultyAdvisor) return false;
+      if (officer) return true;
+      return opts.sectorId ? leadsSector(ctx, opts.sectorId) : false;
+
+    case "schedule_pitch":
+      return officer || ctx.isAppAdmin;
+
+    case "cast_vote":
+      return isActiveVoter(ctx);
+
+    case "withdraw_pitch":
+      if (ctx.isAppAdmin) return true;
+      if (officer) return true;
+      return opts.sectorId ? leadsSector(ctx, opts.sectorId) : false;
+
+    case "create_ticket":
+    case "execute_ticket":
+    case "manage_holdings":
+      return canExecute(ctx);
+
+    case "set_sector_targets":
+      if (officer || ctx.isAppAdmin) return true;
+      // Equity Strategies / Macro leader may set targets
+      return (
+        opts.isStrategySector === true &&
+        opts.sectorId !== undefined &&
+        leadsSector(ctx, opts.sectorId)
+      );
+
+    case "manage_fund_settings":
+      return officer || ctx.isAppAdmin;
+
+    case "manage_roster":
+    case "reset_member_password":
+      // officers (not PM-only) and app admin; PM is an officer role,
+      // but spec grants roster to officers generally and not the PM
+      // column — PM is excluded from roster/reset.
+      if (ctx.isAppAdmin) return true;
+      return (
+        role !== null &&
+        ["president", "vice_president", "alumni_relations"].includes(role)
+      );
+
+    case "post_updates":
+    case "record_attendance":
+      return officer || ctx.isFacultyAdvisor || ctx.isAppAdmin;
+
+    case "trigger_backup":
+    case "view_audit_log":
+      return officer || ctx.isFacultyAdvisor || ctx.isAppAdmin;
+
+    case "grant_app_admin":
+      return ctx.isAppAdmin;
+
+    default:
+      return false;
+  }
+}
+
+/** Human label for a member's role in a fund, e.g. "Portfolio Manager". */
+export function roleLabel(
+  role: MembershipRole | null,
+  titleOverride?: string | null
+): string {
+  if (titleOverride) return titleOverride;
+  switch (role) {
+    case "president":
+      return "President";
+    case "vice_president":
+      return "Vice President";
+    case "portfolio_manager":
+      return "Portfolio Manager";
+    case "alumni_relations":
+      return "Director of Alumni Relations";
+    case "sector_leader":
+      return "Sector Leader";
+    case "analyst":
+      return "Analyst";
+    case "viewer":
+      return "Viewer";
+    default:
+      return "Guest";
+  }
+}
