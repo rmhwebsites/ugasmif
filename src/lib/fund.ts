@@ -85,7 +85,7 @@ export const getFundContext = cache(
       .eq("academic_year_id", currentYear.id)
       .maybeSingle();
 
-    let membership = (current as Membership) ?? null;
+    let membership: Membership | null = (current as Membership | null) ?? null;
     if (!membership) {
       const { data: past } = await supabase
         .from("memberships")
