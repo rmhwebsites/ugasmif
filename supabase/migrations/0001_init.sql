@@ -439,19 +439,23 @@ create trigger on_auth_user_created
 -- Global flags and the forced-password-change flag may only be changed by the
 -- service role (admin routes). RLS cannot express per-column rules, so this
 -- trigger enforces it.
+-- Deliberately security INVOKER: the function only compares OLD and NEW, so
+-- it needs no elevated rights, and running as the invoker is what makes
+-- current_user the caller's actual role. Under security definer current_user
+-- would be the function owner and the check below would pass for everyone.
 create or replace function protect_profile_flags()
 returns trigger
 language plpgsql
-security definer
 set search_path = public
 as $$
-declare
-  v_claims text := nullif(current_setting('request.jwt.claims', true), '');
 begin
-  -- No claims at all = a direct database connection (migrations, seed script),
-  -- which is trusted. PostgREST always sets claims, so API callers cannot
-  -- reach this branch.
-  if v_claims is null or (v_claims::jsonb ->> 'role') = 'service_role' then
+  -- PostgREST runs every API request as one of these two roles. Everything
+  -- else is a trusted path: migrations and the seed script connect as
+  -- postgres, and the admin routes use the service role, which PostgREST
+  -- switches to service_role. Keying on the database role rather than a
+  -- request.jwt.* setting means the guard holds no matter which claim form
+  -- PostgREST populates.
+  if current_user not in ('anon', 'authenticated') then
     return new;
   end if;
   if new.is_app_admin        is distinct from old.is_app_admin
