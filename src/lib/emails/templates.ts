@@ -46,7 +46,11 @@ export function renderEmail(opts: EmailTemplateOptions): RenderedEmail {
   const { accent, buttonText } =
     ACCENTS[opts.fundSlug ?? "neutral"] ?? ACCENTS.neutral;
   const ctaUrl =
-    opts.ctaLabel && opts.ctaPath ? `${appUrl()}${opts.ctaPath}` : null;
+    opts.ctaLabel && opts.ctaPath
+      ? opts.ctaPath.startsWith("http")
+        ? opts.ctaPath // absolute link (e.g. a Supabase invite action link)
+        : `${appUrl()}${opts.ctaPath}`
+      : null;
 
   const bodyHtml = opts.bodyLines
     .map(
