@@ -145,9 +145,14 @@ interface QueryResult<T> {
 
 /** Throws with context on a PostgREST error so the phase's catch can log it. */
 function must<T>(result: QueryResult<T>, what: string): T {
-  if (result.error) throw new Error(`${what}: ${result.error.message}`);
+  check(result, what);
   if (result.data === null) throw new Error(`${what}: no rows returned`);
   return result.data;
+}
+
+/** Same, for writes that do not ask for rows back (data is null on success). */
+function check(result: { error: { message: string } | null }, what: string): void {
+  if (result.error) throw new Error(`${what}: ${result.error.message}`);
 }
 
 /**
@@ -932,24 +937,24 @@ async function seedAthenaHoldings(core: Core): Promise<{
   let invested = 0;
   const rows: Array<HoldingPayload & { symbol: string; name: string }> =
     ATHENA_HOLDINGS.map((h) => {
-    const price = prices.get(h.symbol) ?? FALLBACK_PRICES[h.symbol];
-    const weight = h.weight * scale;
-    const quantity = Math.round(((weight / 100) * ATHENA_TOTAL) / price);
-    const avgCost = round(price * randBetween(`${h.symbol}:cost`, 0.8, 0.98), 4);
-    invested += quantity * price;
-    return {
-      sector_id: core.sectors.get(`athena:${h.sector}`) ?? null,
-      instrument_type: h.instrument_type,
-      symbol: h.symbol,
-      name: h.name,
-      quantity,
-      avg_cost: avgCost,
-      pricing_method: "live" as PricingMethod,
-      is_active: true,
-      opened_on: h.opened_on ?? DEFAULT_OPENED_ON,
-      closed_on: null,
-    };
-  });
+      const price = prices.get(h.symbol) ?? FALLBACK_PRICES[h.symbol];
+      const weight = h.weight * scale;
+      const quantity = Math.round(((weight / 100) * ATHENA_TOTAL) / price);
+      const avgCost = round(price * randBetween(`${h.symbol}:cost`, 0.8, 0.98), 4);
+      invested += quantity * price;
+      return {
+        sector_id: core.sectors.get(`athena:${h.sector}`) ?? null,
+        instrument_type: h.instrument_type,
+        symbol: h.symbol,
+        name: h.name,
+        quantity,
+        avg_cost: avgCost,
+        pricing_method: "live" as PricingMethod,
+        is_active: true,
+        opened_on: h.opened_on ?? DEFAULT_OPENED_ON,
+        closed_on: null,
+      };
+    });
 
   const closed = ATHENA_CLOSED_HOLDING;
   const closedPrice = prices.get(closed.symbol) ?? FALLBACK_PRICES[closed.symbol];
