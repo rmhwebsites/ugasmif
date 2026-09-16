@@ -32,7 +32,7 @@ import type {
   TreasuryCurvePoint,
 } from "../src/types/domain";
 
-loadEnv({ path: ".env.local" });
+loadEnv({ path: ".env.local", quiet: true });
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -690,7 +690,7 @@ interface Core {
 }
 
 async function seedCore(): Promise<Core> {
-  must(
+  check(
     await db.from("funds").upsert(
       FUNDS.map((f) => ({
         slug: f.slug,
@@ -718,12 +718,11 @@ async function seedCore(): Promise<Core> {
   console.log(`  funds: ${fundRows.length}`);
 
   // Only one row may have is_current, so stand the others down first.
-  must(
+  check(
     await db
       .from("academic_years")
       .update({ is_current: false })
-      .neq("label", YEAR_LABEL)
-      .select("id"),
+      .neq("label", YEAR_LABEL),
     "academic_years stand down"
   );
   const yearRows = must(
@@ -756,7 +755,7 @@ async function seedCore(): Promise<Core> {
       is_active: true,
     }));
   });
-  must(
+  check(
     await db.from("sectors").upsert(sectorPayload, { onConflict: "fund_id,slug" }),
     "sectors upsert"
   );
@@ -858,7 +857,7 @@ async function seedPeople(core: Core): Promise<{
     ];
   });
   for (const batch of chunk(payload, 200)) {
-    must(
+    check(
       await db
         .from("memberships")
         .upsert(batch, { onConflict: "user_id,fund_id,academic_year_id" }),
@@ -899,8 +898,8 @@ async function upsertHoldings(
     const key = (row.symbol ?? row.name).toUpperCase();
     const id = existing.get(key);
     if (id) {
-      must(
-        await db.from("holdings").update(row).eq("id", id).select("id"),
+      check(
+        await db.from("holdings").update(row).eq("id", id),
         `holding update ${key}`
       );
       ids.set(key, id);
@@ -973,8 +972,8 @@ async function seedAthenaHoldings(core: Core): Promise<{
 
   const ids = await upsertHoldings(fundId, rows);
   const cash = round(Math.max(0, ATHENA_TOTAL - invested), 2);
-  must(
-    await db.from("funds").update({ cash_balance: cash }).eq("id", fundId).select("id"),
+  check(
+    await db.from("funds").update({ cash_balance: cash }).eq("id", fundId),
     "athena cash_balance"
   );
   console.log(
@@ -1039,8 +1038,8 @@ async function seedArchHoldings(core: Core): Promise<{
 
   const ids = await upsertHoldings(fundId, rows);
   const cash = round(Math.max(0, ARCH_TOTAL - invested), 2);
-  must(
-    await db.from("funds").update({ cash_balance: cash }).eq("id", fundId).select("id"),
+  check(
+    await db.from("funds").update({ cash_balance: cash }).eq("id", fundId),
     "arch cash_balance"
   );
   console.log(`  arch holdings: ${rows.length}, cash $${cash.toLocaleString("en-US")}`);
@@ -1082,7 +1081,7 @@ async function seedBondMarks(
     // Rough current yield plus pull-to-par over the remaining life.
     const ytm = round(coupon + (100 - cleanPrice) / Math.max(duration, 1), 3);
 
-    must(
+    check(
       await db
         .from("bond_marks")
         .insert({
@@ -1094,13 +1093,12 @@ async function seedBondMarks(
           marked_by: markedBy,
           marked_at: markedAt,
           notes: "Seed data — placeholder mark, replace with a real broker quote.",
-        })
-        .select("id"),
+        }),
       `bond_marks insert ${bond.name}`
     );
     // Keep the holding's headline duration/ytm in step with its latest mark.
-    must(
-      await db.from("holdings").update({ duration, ytm }).eq("id", holdingId).select("id"),
+    check(
+      await db.from("holdings").update({ duration, ytm }).eq("id", holdingId),
       `holding duration ${bond.name}`
     );
     written += 1;
@@ -1169,7 +1167,7 @@ async function seedTreasuryCurve(): Promise<number> {
   }
 
   for (const batch of chunk(points, 500)) {
-    must(
+    check(
       await db
         .from("treasury_curve")
         .upsert(batch, { onConflict: "curve_date,tenor_months" }),
@@ -1261,7 +1259,7 @@ async function seedTrades(
     ];
   });
   if (rows.length > 0) {
-    must(await db.from("trades").insert(rows).select("id"), "trades insert");
+    check(await db.from("trades").insert(rows), "trades insert");
   }
   console.log(`  trades: ${rows.length} new (${ATHENA_TRADES.length} seeded in total)`);
   return rows.length;
@@ -1425,8 +1423,8 @@ async function seedPitches(
 
     let pitchId = idByTitle.get(pitch.title);
     if (pitchId) {
-      must(
-        await db.from("pitches").update(row).eq("id", pitchId).select("id"),
+      check(
+        await db.from("pitches").update(row).eq("id", pitchId),
         `pitch update ${pitch.title}`
       );
     } else {
@@ -1448,7 +1446,7 @@ async function seedPitches(
       cast_at: (closedAt ?? new Date().toISOString()) as string,
     }));
     if (ballots.length > 0) {
-      must(
+      check(
         await db.from("votes").upsert(ballots, { onConflict: "pitch_id,voter_id" }),
         `votes upsert ${pitch.title}`
       );
