@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { easternDateString } from "@/lib/format";
+import { easternDateString, formatCurrency } from "@/lib/format";
 import type { Holding } from "@/types/domain";
 
 const inputClass =
@@ -54,7 +54,9 @@ export function CashMovementForm({
       setError(data?.error ?? "Save failed.");
       return;
     }
-    setNotice(`Recorded. New cash balance: $${Number(data.cash_balance).toLocaleString()}`);
+    setNotice(
+      `Recorded. New cash balance: ${formatCurrency(Number(data.cash_balance))}`
+    );
     setForm({ ...form, amount: "", notes: "" });
     router.refresh();
   }

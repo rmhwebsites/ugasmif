@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
 
 export interface AdminUserRow {
@@ -173,9 +174,9 @@ function toRows(data: HealthResponse): HealthCheck[] {
       name: "Nightly backup",
       ok: backup.ok,
       detail: backup.lastRun
-        ? `${backup.lastRun.status} at ${new Date(
+        ? `${backup.lastRun.status} at ${formatDateTime(
             backup.lastRun.started_at
-          ).toLocaleString()}`
+          )} ET`
         : "never run",
     },
     {

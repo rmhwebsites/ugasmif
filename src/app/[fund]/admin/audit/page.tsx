@@ -6,7 +6,7 @@ import { getFundContext } from "@/lib/fund";
 import { can } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatDateTime } from "@/lib/format";
+import { AuditTable } from "@/components/tables/AuditTable";
 import type { AuditLogEntry, Membership, Profile } from "@/types/domain";
 
 export const metadata: Metadata = { title: "Audit Log" };
@@ -149,47 +149,14 @@ export default async function AuditPage({
         />
       ) : (
         <div className="glass-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: 700 }}>
-              <thead>
-                <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
-                  <th className="px-4 py-2.5 font-medium">When</th>
-                  <th className="px-3 py-2.5 font-medium">Actor</th>
-                  <th className="px-3 py-2.5 font-medium">Action</th>
-                  <th className="px-3 py-2.5 font-medium">Entity</th>
-                  <th className="px-3 py-2.5 font-medium">Detail</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map((e) => (
-                  <tr key={e.id} className="border-b border-card-border/50 align-top">
-                    <td className="whitespace-nowrap px-4 py-2.5 text-muted">
-                      {formatDateTime(e.created_at)}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {e.actor_id
-                        ? nameById.get(e.actor_id) ?? "(former member)"
-                        : "system"}
-                    </td>
-                    <td className="px-3 py-2.5 font-medium">{e.action}</td>
-                    <td className="px-3 py-2.5 text-muted">{e.entity}</td>
-                    <td className="px-3 py-2.5">
-                      {(e.before || e.after) && (
-                        <details>
-                          <summary className="cursor-pointer text-xs text-accent">
-                            before / after
-                          </summary>
-                          <pre className="mt-1 max-w-md overflow-x-auto rounded bg-highlight p-2 text-[10px] leading-relaxed">
-{JSON.stringify({ before: e.before, after: e.after }, null, 2)}
-                          </pre>
-                        </details>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <AuditTable
+            entries={entries.map((e) => ({
+              ...e,
+              actorName: e.actor_id
+                ? nameById.get(e.actor_id) ?? "(former member)"
+                : "system",
+            }))}
+          />
           {entries.length === PAGE_SIZE && (
             <p className="border-t border-card-border px-4 py-2 text-xs text-muted">
               Showing the most recent {PAGE_SIZE} entries. Narrow the filters to

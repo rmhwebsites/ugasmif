@@ -29,7 +29,12 @@ import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AlumniNotice } from "@/components/ui/AlumniNotice";
 import {
-  formatCurrencyWhole,
+  RatingBucketTable,
+  SectorAttributionTable,
+  SectorWeightsTable,
+  type RatingBucketRow,
+} from "@/components/tables/PerformanceTables";
+import {
   formatDate,
   formatNumber,
   formatPercent,
@@ -120,10 +125,12 @@ function durationFromDetail(s: FundSnapshot): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
-function SectorWeightsTable({ v }: { v: FundValuation }) {
+function SectorWeightsCard({ v }: { v: FundValuation }) {
   const rows = v.sectors.filter(
     (s) =>
-      s.weightPct > 0 || s.targetWeightPct !== null || s.benchmarkWeightPct !== null
+      s.weightPct > 0 ||
+      s.targetWeightPct !== null ||
+      s.benchmarkWeightPct !== null
   );
   return (
     <Card className="overflow-hidden">
@@ -131,68 +138,7 @@ function SectorWeightsTable({ v }: { v: FundValuation }) {
         title="Sector weights vs benchmark"
         action={<span className="text-xs text-muted">Live valuation</span>}
       />
-      {rows.length === 0 ? (
-        <p className="px-6 py-8 text-center text-sm text-muted">
-          No sector data yet. Officers add sectors and set benchmark weights
-          under Fund Admin → Sectors.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-card-border text-left text-[11px] uppercase tracking-wider text-muted">
-                <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
-                  Sector
-                </th>
-                <th className="px-3 py-2.5 text-right font-medium">Weight</th>
-                <th className="px-3 py-2.5 text-right font-medium">Target</th>
-                <th className="px-3 py-2.5 text-right font-medium">Benchmark</th>
-                <th className="px-3 py-2.5 pr-4 text-right font-medium sm:pr-6">
-                  Active
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((s) => {
-                const active =
-                  s.benchmarkWeightPct !== null
-                    ? s.weightPct - s.benchmarkWeightPct
-                    : null;
-                return (
-                  <tr
-                    key={s.sectorId}
-                    className="border-b border-card-border/50 last:border-0"
-                  >
-                    <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
-                      {s.sectorName}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">
-                      {formatPercent(s.weightPct)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-muted">
-                      {s.targetWeightPct !== null
-                        ? formatPercent(s.targetWeightPct)
-                        : "—"}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-muted">
-                      {s.benchmarkWeightPct !== null
-                        ? formatPercent(s.benchmarkWeightPct)
-                        : "—"}
-                    </td>
-                    <td
-                      className={`px-3 py-2.5 pr-4 text-right font-medium tabular-nums sm:pr-6 ${cellClass(
-                        active
-                      )}`}
-                    >
-                      {pct(active)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <SectorWeightsTable sectors={rows} />
     </Card>
   );
 }
@@ -244,69 +190,11 @@ function SectorAttributionCard({
             cash and positions opened or closed inside the period are not
             attributed.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-card-border text-left text-[11px] uppercase tracking-wider text-muted">
-                  <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
-                    Sector
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-medium">
-                    Start weight
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-medium">Return</th>
-                  <th className="px-3 py-2.5 pr-4 text-right font-medium sm:pr-6">
-                    Contribution
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {attribution.rows.map((r) => (
-                  <tr
-                    key={r.sectorName}
-                    className="border-b border-card-border/50"
-                  >
-                    <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
-                      {r.sectorName}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-muted">
-                      {formatPercent(r.startWeightPct)}
-                    </td>
-                    <td
-                      className={`px-3 py-2.5 text-right tabular-nums ${cellClass(
-                        r.returnPct
-                      )}`}
-                    >
-                      {formatSignedPercent(r.returnPct)}
-                    </td>
-                    <td
-                      className={`px-3 py-2.5 pr-4 text-right font-medium tabular-nums sm:pr-6 ${cellClass(
-                        r.contributionPct
-                      )}`}
-                    >
-                      {formatSignedPercent(r.contributionPct, 2)}
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-semibold backdrop-blur-xl sm:px-6">
-                    Total
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-muted">
-                    {formatPercent(attribution.coveredWeightPct)}
-                  </td>
-                  <td className="px-3 py-2.5" />
-                  <td
-                    className={`px-3 py-2.5 pr-4 text-right font-semibold tabular-nums sm:pr-6 ${cellClass(
-                      attribution.totalPct
-                    )}`}
-                  >
-                    {formatSignedPercent(attribution.totalPct, 2)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <SectorAttributionTable
+            rows={attribution.rows}
+            coveredWeightPct={attribution.coveredWeightPct}
+            totalPct={attribution.totalPct}
+          />
         </>
       )}
     </Card>
@@ -314,7 +202,7 @@ function SectorAttributionCard({
 }
 
 /** Arch: market-value weighted allocation by rating bucket (SPEC 14). */
-function RatingBucketTable({ v }: { v: FundValuation }) {
+function RatingBucketCard({ v }: { v: FundValuation }) {
   const byBucket = new Map<string, { marketValue: number; count: number }>();
   for (const h of v.holdings) {
     const bucket = ratingBucket(h.holding.rating);
@@ -323,12 +211,13 @@ function RatingBucketTable({ v }: { v: FundValuation }) {
     agg.count += 1;
     byBucket.set(bucket, agg);
   }
-  const rows = RATING_BUCKETS.flatMap((bucket) => {
+  const rows: RatingBucketRow[] = RATING_BUCKETS.flatMap((bucket, order) => {
     const agg = byBucket.get(bucket);
     return agg && agg.marketValue > 0
       ? [
           {
             bucket,
+            order,
             marketValue: agg.marketValue,
             count: agg.count,
             weightPct:
@@ -344,52 +233,7 @@ function RatingBucketTable({ v }: { v: FundValuation }) {
         title="Allocation by rating"
         action={<span className="text-xs text-muted">Live valuation</span>}
       />
-      {rows.length === 0 ? (
-        <p className="px-6 py-8 text-center text-sm text-muted">
-          No rated positions yet. Ratings are set per holding under Fund Admin →
-          Holdings.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-card-border text-left text-[11px] uppercase tracking-wider text-muted">
-                <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
-                  Rating
-                </th>
-                <th className="px-3 py-2.5 text-right font-medium">Positions</th>
-                <th className="px-3 py-2.5 text-right font-medium">
-                  Market value
-                </th>
-                <th className="px-3 py-2.5 pr-4 text-right font-medium sm:pr-6">
-                  Weight
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.bucket}
-                  className="border-b border-card-border/50 last:border-0"
-                >
-                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
-                    {r.bucket}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-muted">
-                    {r.count}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
-                    {formatCurrencyWhole(r.marketValue)}
-                  </td>
-                  <td className="px-3 py-2.5 pr-4 text-right font-medium tabular-nums sm:pr-6">
-                    {formatPercent(r.weightPct)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <RatingBucketTable rows={rows} />
     </Card>
   );
 }
@@ -453,7 +297,7 @@ export default async function PerformancePage({
           title="Not enough history yet"
           hint="Performance charts appear after the first two nightly snapshots."
         />
-        <SectorWeightsTable v={v} />
+        <SectorWeightsCard v={v} />
       </div>
     );
   }
@@ -733,9 +577,9 @@ export default async function PerformancePage({
         </div>
       )}
 
-      {isFixedIncome && <RatingBucketTable v={v} />}
+      {isFixedIncome && <RatingBucketCard v={v} />}
 
-      <SectorWeightsTable v={v} />
+      <SectorWeightsCard v={v} />
     </div>
   );
 }

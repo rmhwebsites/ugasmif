@@ -12,17 +12,10 @@ import { ArrowRight } from "lucide-react";
 import { getFundContext } from "@/lib/fund";
 import { canExecute } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { TicketCard, isBondInstrument } from "@/components/trades/TicketCard";
-import { Badge } from "@/components/ui/Badge";
+import { TicketCard } from "@/components/trades/TicketCard";
+import { TradeLedgerTable } from "@/components/tables/TradeLedgerTable";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import {
-  formatBondPrice,
-  formatCurrency,
-  formatCurrencyWhole,
-  formatDate,
-  formatNumber,
-} from "@/lib/format";
 import type { Holding, Sector, Trade, TradeTicket } from "@/types/domain";
 
 export const metadata: Metadata = { title: "Trades" };
@@ -38,11 +31,6 @@ type SectorLite = Pick<Sector, "id" | "name" | "slug">;
 
 function first(v: string | string[] | undefined): string {
   return (Array.isArray(v) ? v[0] : v) ?? "";
-}
-
-/** Date-only strings render at noon UTC so ET display never slips a day. */
-function dateOnly(d: string | null): string {
-  return d ? formatDate(`${d}T12:00:00Z`) : "—";
 }
 
 export default async function TradesPage({
@@ -298,130 +286,24 @@ export default async function TradesPage({
             </Link>
           </div>
         ) : (
-          <div className="max-h-[70vh] overflow-auto">
-            <table className="w-full" style={{ minWidth: 1000 }}>
-              <thead>
-                <tr className="border-b border-card-border text-[10px] uppercase tracking-wider text-muted sm:text-xs">
-                  <th className="sticky left-0 top-0 z-30 bg-sticky px-3 py-2.5 text-left font-medium backdrop-blur-xl sm:px-6 sm:py-3">
-                    Date
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-left font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Action
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-left font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Security
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-right font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Quantity
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-right font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Price
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-right font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Principal
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-right font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Accrued
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-right font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Commission
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-left font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Executed by
-                  </th>
-                  <th className="sticky top-0 z-20 bg-sticky px-2 py-2.5 text-left font-medium backdrop-blur-xl sm:px-4 sm:py-3">
-                    Notes
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {trades.map((t) => {
-                  const h = holdingById.get(t.holding_id);
-                  const bond = h ? isBondInstrument(h.instrument_type) : false;
-                  return (
-                    <tr
-                      key={t.id}
-                      className="border-b border-card-border/50 transition-colors hover:bg-highlight"
-                    >
-                      <td className="sticky left-0 z-10 bg-sticky px-3 py-3 text-left text-xs tabular-nums backdrop-blur-xl sm:px-6 sm:py-3.5 sm:text-sm">
-                        {dateOnly(t.trade_date)}
-                      </td>
-                      <td className="px-2 py-3 text-left sm:px-4">
-                        <Badge tone={t.action === "buy" ? "gain" : "loss"}>
-                          {t.action.toUpperCase()}
-                        </Badge>
-                      </td>
-                      <td className="px-2 py-3 text-left text-xs sm:px-4 sm:text-sm">
-                        {h ? (
-                          <Link
-                            href={`/${ctx.fund.slug}/holdings/${h.id}`}
-                            className="block hover:underline"
-                          >
-                            <span className="font-semibold">
-                              {h.symbol ?? h.name}
-                            </span>
-                            {h.symbol && (
-                              <span className="block max-w-[180px] truncate text-[10px] text-muted sm:text-xs">
-                                {h.name}
-                              </span>
-                            )}
-                          </Link>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-3 text-right text-xs tabular-nums sm:px-4 sm:text-sm">
-                        {bond
-                          ? formatCurrencyWhole(Number(t.quantity))
-                          : formatNumber(Number(t.quantity))}
-                      </td>
-                      <td className="px-2 py-3 text-right text-xs tabular-nums sm:px-4 sm:text-sm">
-                        {bond
-                          ? formatBondPrice(Number(t.price))
-                          : formatCurrency(Number(t.price))}
-                      </td>
-                      <td className="px-2 py-3 text-right text-xs font-medium tabular-nums sm:px-4 sm:text-sm">
-                        {formatCurrency(Number(t.amount))}
-                      </td>
-                      <td className="px-2 py-3 text-right text-xs tabular-nums text-muted sm:px-4 sm:text-sm">
-                        {Number(t.accrued_interest) !== 0
-                          ? formatCurrency(Number(t.accrued_interest))
-                          : "—"}
-                      </td>
-                      <td className="px-2 py-3 text-right text-xs tabular-nums text-muted sm:px-4 sm:text-sm">
-                        {Number(t.commission) !== 0
-                          ? formatCurrency(Number(t.commission))
-                          : "—"}
-                      </td>
-                      <td className="px-2 py-3 text-left text-xs text-muted sm:px-4 sm:text-sm">
-                        <span className="block max-w-[140px] truncate">
-                          {nameById.get(t.executed_by) ?? "—"}
-                        </span>
-                      </td>
-                      <td className="px-2 py-3 text-left text-xs text-muted sm:px-4 sm:text-sm">
-                        <div className="max-w-[240px] space-y-1">
-                          {t.reverses_trade_id && (
-                            <Badge
-                              tone="warn"
-                              title={`This correction row reverses trade ${t.reverses_trade_id}`}
-                            >
-                              reverses trade {t.reverses_trade_id.slice(0, 8)}
-                            </Badge>
-                          )}
-                          {t.notes && (
-                            <span className="block truncate" title={t.notes}>
-                              {t.notes}
-                            </span>
-                          )}
-                          {!t.reverses_trade_id && !t.notes && "—"}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <TradeLedgerTable
+            fund={ctx.fund.slug}
+            trades={trades.map((t) => {
+              const h = holdingById.get(t.holding_id);
+              return {
+                ...t,
+                holding: h
+                  ? {
+                      id: h.id,
+                      symbol: h.symbol,
+                      name: h.name,
+                      instrument_type: h.instrument_type,
+                    }
+                  : null,
+                executedByName: nameById.get(t.executed_by) ?? null,
+              };
+            })}
+          />
         )}
       </div>
       )}

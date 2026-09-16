@@ -29,6 +29,10 @@ import { ValueChart } from "@/components/charts/ValueChart";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge, PitchStatusBadge } from "@/components/ui/Badge";
 import {
+  HoldingTradesTable,
+  MarkHistoryTable,
+} from "@/components/tables/HoldingDetailTables";
+import {
   easternDateString,
   formatBondPrice,
   formatCurrency,
@@ -138,12 +142,6 @@ async function spreadsByMarkId(
   return out;
 }
 
-function spreadLabel(bp: number | null): string {
-  if (bp === null || !Number.isFinite(bp)) return "—";
-  const rounded = Math.round(bp);
-  return `${rounded >= 0 ? "+" : ""}${rounded} bp`;
-}
-
 function gainClass(value: number | null): string {
   return (value ?? 0) >= 0 ? "text-gain" : "text-loss";
 }
@@ -158,62 +156,7 @@ function TradesCard({ trades, isBond }: { trades: Trade[]; isBond: boolean }) {
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Position History" />
-      {trades.length === 0 ? (
-        <p className="p-6 text-sm text-muted">
-          No trades recorded for this holding yet. Executed tickets will show
-          up here.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full" style={{ minWidth: 560 }}>
-            <thead>
-              <tr className="border-b border-card-border text-left">
-                <th className={thClass}>Date</th>
-                <th className={thClass}>Action</th>
-                <th className={`${thClass} text-right`}>
-                  {isBond ? "Face" : "Shares"}
-                </th>
-                <th className={`${thClass} text-right`}>Price</th>
-                <th className={`${thClass} text-right`}>Amount</th>
-                <th className={`${thClass} hidden text-right sm:table-cell`}>
-                  Commission
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((t) => (
-                <tr
-                  key={t.id}
-                  className="border-b border-card-border/50 transition-colors hover:bg-highlight"
-                >
-                  <td className={tdClass}>{formatDate(t.trade_date)}</td>
-                  <td className={tdClass}>
-                    <Badge tone={t.action === "buy" ? "gain" : "loss"}>
-                      {t.action}
-                    </Badge>
-                  </td>
-                  <td className={`${tdClass} text-right`}>
-                    {isBond
-                      ? formatCurrencyWhole(Number(t.quantity))
-                      : formatNumber(Number(t.quantity))}
-                  </td>
-                  <td className={`${tdClass} text-right`}>
-                    {isBond
-                      ? formatBondPrice(Number(t.price))
-                      : formatCurrency(Number(t.price))}
-                  </td>
-                  <td className={`${tdClass} text-right font-medium`}>
-                    {formatCurrency(Number(t.amount))}
-                  </td>
-                  <td className={`${tdClass} hidden text-right text-muted sm:table-cell`}>
-                    {formatCurrency(Number(t.commission))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <HoldingTradesTable trades={trades} isBond={isBond} />
     </Card>
   );
 }
@@ -532,63 +475,13 @@ export default async function HoldingDetailPage({
                     />
                   </div>
                 )}
-                <div className="overflow-x-auto">
-                  <table className="w-full" style={{ minWidth: 640 }}>
-                    <thead>
-                      <tr className="border-b border-card-border text-left">
-                        <th className={thClass}>Marked</th>
-                        <th className={`${thClass} text-right`}>Clean Price</th>
-                        <th className={`${thClass} text-right`}>YTM</th>
-                        <th className={`${thClass} text-right`}>Dur</th>
-                        <th
-                          className={`${thClass} text-right`}
-                          title="Mark YTM minus the interpolated Treasury par yield at the holding's benchmark tenor, on the nearest prior curve date."
-                        >
-                          Sprd vs Tsy
-                        </th>
-                        <th className={thClass}>Source</th>
-                        <th className={`${thClass} hidden md:table-cell`}>
-                          Notes
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {marks.map((m) => (
-                        <tr
-                          key={m.id}
-                          className="border-b border-card-border/50 transition-colors hover:bg-highlight"
-                        >
-                          <td className={tdClass}>{formatDate(m.marked_at)}</td>
-                          <td className={`${tdClass} text-right font-medium`}>
-                            {formatBondPrice(Number(m.clean_price))}
-                          </td>
-                          <td className={`${tdClass} text-right`}>
-                            {formatPercent(
-                              m.ytm !== null ? Number(m.ytm) : null,
-                              2
-                            )}
-                          </td>
-                          <td className={`${tdClass} text-right text-muted`}>
-                            {m.duration !== null
-                              ? formatNumber(Number(m.duration), 1)
-                              : "—"}
-                          </td>
-                          <td className={`${tdClass} text-right text-muted`}>
-                            {spreadLabel(spreads.get(m.id) ?? null)}
-                          </td>
-                          <td className={`${tdClass} text-muted`}>
-                            {MARK_SOURCE_LABELS[m.source] ?? m.source}
-                          </td>
-                          <td
-                            className={`${tdClass} hidden max-w-[200px] truncate text-muted md:table-cell`}
-                          >
-                            {m.notes ?? "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <MarkHistoryTable
+                  marks={marks.map((m) => ({
+                    ...m,
+                    spreadBp: spreads.get(m.id) ?? null,
+                    sourceLabel: MARK_SOURCE_LABELS[m.source] ?? m.source,
+                  }))}
+                />
               </>
             )}
           </Card>

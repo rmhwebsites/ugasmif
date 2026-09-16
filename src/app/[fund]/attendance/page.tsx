@@ -9,6 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { can } from "@/lib/permissions";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { AttendanceRateTable } from "@/components/tables/AttendanceRateTable";
 import { formatDate, formatPercent } from "@/lib/format";
 import type {
   Meeting,
@@ -134,56 +135,20 @@ export default async function AttendancePage({
                   All members
                 </h2>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm" style={{ minWidth: 420 }}>
-                  <thead>
-                    <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
-                      <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
-                        Member
-                      </th>
-                      <th className="px-3 py-2.5 text-right font-medium">
-                        Attended
-                      </th>
-                      <th className="px-3 py-2.5 text-right font-medium">
-                        Rate
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {members
-                      .map((m) => {
-                        const theirs = attendance.filter(
-                          (a) => a.user_id === m.user_id
-                        );
-                        const present = theirs.filter((a) => a.present).length;
-                        return { m, present, total: theirs.length };
-                      })
-                      .sort((a, b) =>
-                        (a.m.profiles?.full_name ?? "").localeCompare(
-                          b.m.profiles?.full_name ?? ""
-                        )
-                      )
-                      .map(({ m, present, total }) => (
-                        <tr
-                          key={m.id}
-                          className="border-b border-card-border/50"
-                        >
-                          <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 backdrop-blur-xl sm:px-6">
-                            {m.profiles?.full_name ?? "—"}
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums">
-                            {present}/{total || meetings.length}
-                          </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums">
-                            {total > 0
-                              ? formatPercent((present / total) * 100, 0)
-                              : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+              <AttendanceRateTable
+                rows={members.map((m) => {
+                  const theirs = attendance.filter(
+                    (a) => a.user_id === m.user_id
+                  );
+                  return {
+                    id: m.id,
+                    name: m.profiles?.full_name ?? "—",
+                    present: theirs.filter((a) => a.present).length,
+                    total: theirs.length,
+                    meetingsHeld: meetings.length,
+                  };
+                })}
+              />
             </section>
           )}
         </>
