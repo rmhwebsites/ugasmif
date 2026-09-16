@@ -6,6 +6,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import {
+  SortableTable,
+  type SortableColumn,
+} from "@/components/ui/SortableTable";
 
 interface PreviewRow {
   row: number;
@@ -16,6 +20,69 @@ interface PreviewRow {
   action: "create" | "update" | "error";
   error: string | null;
 }
+
+// Sorting the preview matters most for one question: which rows failed.
+const PREVIEW_COLUMNS: SortableColumn<PreviewRow>[] = [
+  {
+    key: "row",
+    label: "Row",
+    align: "left",
+    defaultDir: "asc",
+    sortValue: (r) => r.row,
+    render: (r) => <span className="tabular-nums text-muted">{r.row}</span>,
+  },
+  {
+    key: "email",
+    label: "Email",
+    align: "left",
+    defaultDir: "asc",
+    sortValue: (r) => r.email,
+    render: (r) => r.email,
+  },
+  {
+    key: "name",
+    label: "Name",
+    align: "left",
+    defaultDir: "asc",
+    sortValue: (r) => r.full_name,
+    render: (r) => r.full_name,
+  },
+  {
+    key: "fund",
+    label: "Fund",
+    align: "left",
+    defaultDir: "asc",
+    sortValue: (r) => r.fund,
+    render: (r) => r.fund,
+  },
+  {
+    key: "role",
+    label: "Role",
+    align: "left",
+    defaultDir: "asc",
+    sortValue: (r) => r.role,
+    render: (r) => r.role,
+  },
+  {
+    key: "action",
+    label: "Action",
+    align: "left",
+    defaultDir: "asc",
+    // Errors first on the first click: that is what the officer is looking
+    // for before they commit the import.
+    sortValue: (r) => (r.action === "error" ? 0 : r.action === "create" ? 1 : 2),
+    render: (r) =>
+      r.action === "error" ? (
+        <Badge tone="loss" title={r.error ?? undefined}>
+          {r.error}
+        </Badge>
+      ) : (
+        <Badge tone={r.action === "create" ? "gain" : "neutral"}>
+          {r.action}
+        </Badge>
+      ),
+  },
+];
 
 const SAMPLE = `email,full_name,fund,role,sector,is_sector_leader,title_override
 lfuselier@uga.edu,Lucy Fuselier,athena,vice_president,,false,
@@ -118,41 +185,15 @@ export function RosterImport({ fund }: { fund: string }) {
       {error && <p className="text-sm text-loss">{error}</p>}
 
       {preview && (
-        <div className="glass-card max-h-80 overflow-auto">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-sticky backdrop-blur-xl">
-              <tr className="border-b border-card-border text-left uppercase tracking-wider text-muted">
-                <th className="px-3 py-2 font-medium">Row</th>
-                <th className="px-3 py-2 font-medium">Email</th>
-                <th className="px-3 py-2 font-medium">Name</th>
-                <th className="px-3 py-2 font-medium">Fund</th>
-                <th className="px-3 py-2 font-medium">Role</th>
-                <th className="px-3 py-2 font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {preview.map((r) => (
-                <tr key={r.row} className="border-b border-card-border/50">
-                  <td className="px-3 py-1.5 text-muted">{r.row}</td>
-                  <td className="px-3 py-1.5">{r.email}</td>
-                  <td className="px-3 py-1.5">{r.full_name}</td>
-                  <td className="px-3 py-1.5">{r.fund}</td>
-                  <td className="px-3 py-1.5">{r.role}</td>
-                  <td className="px-3 py-1.5">
-                    {r.action === "error" ? (
-                      <Badge tone="loss" title={r.error ?? undefined}>
-                        {r.error}
-                      </Badge>
-                    ) : (
-                      <Badge tone={r.action === "create" ? "gain" : "neutral"}>
-                        {r.action}
-                      </Badge>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="glass-card overflow-hidden">
+          <SortableTable
+            rows={preview}
+            columns={PREVIEW_COLUMNS}
+            rowKey={(r) => String(r.row)}
+            initialSort={{ key: "row", dir: "asc" }}
+            maxHeight="20rem"
+            caption="Roster import preview"
+          />
         </div>
       )}
     </div>

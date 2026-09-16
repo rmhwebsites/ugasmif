@@ -3,9 +3,14 @@
 // Inline roster editing (SPEC 11.3 /admin/members): role, sector, leader
 // flag, status, title. Each change PATCHes immediately.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  SortButton,
+  useSortedRows,
+  type SortableColumn,
+} from "@/components/ui/SortableTable";
 import type {
   Membership,
   MembershipRole,
@@ -30,6 +35,14 @@ const ROLES: MembershipRole[] = [
 
 const STATUSES: MembershipStatus[] = ["active", "alumni", "inactive"];
 
+const HEADERS: { key: string; label: string; align?: "center" }[] = [
+  { key: "member", label: "Member" },
+  { key: "role", label: "Role" },
+  { key: "sector", label: "Sector" },
+  { key: "leader", label: "Leader", align: "center" },
+  { key: "status", label: "Status" },
+];
+
 const selectClass =
   "rounded-lg border border-input-border bg-input-bg px-2 py-1 text-xs outline-none transition-colors focus:border-accent";
 
@@ -45,6 +58,37 @@ export function MemberEditor({
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Sector sorts by the name the select shows, not the raw id.
+  const sortColumns: Pick<
+    SortableColumn<RosterRow>,
+    "key" | "sortValue" | "defaultDir"
+  >[] = useMemo(() => {
+    const sectorName = new Map(sectors.map((x) => [x.id, x.name]));
+    return [
+      {
+        key: "member",
+        defaultDir: "asc",
+        sortValue: (m: RosterRow) => m.profiles?.full_name ?? "",
+      },
+      { key: "role", defaultDir: "asc", sortValue: (m: RosterRow) => m.role },
+      {
+        key: "sector",
+        defaultDir: "asc",
+        sortValue: (m: RosterRow) =>
+          m.sector_id ? sectorName.get(m.sector_id) ?? "" : "",
+      },
+      {
+        key: "leader",
+        sortValue: (m: RosterRow) => (m.is_sector_leader ? 1 : 0),
+      },
+      {
+        key: "status",
+        defaultDir: "asc",
+        sortValue: (m: RosterRow) => m.status,
+      },
+    ];
+  }, [sectors]);
 
   async function patch(id: string, body: Record<string, unknown>) {
     setBusyId(id);
@@ -63,26 +107,49 @@ export function MemberEditor({
     router.refresh();
   }
 
+  const { sorted, sort, toggle } = useSortedRows(members, sortColumns, {
+    key: "member",
+    dir: "asc",
+  });
+
   return (
     <div className="space-y-2">
       {error && <p className="text-sm text-loss">{error}</p>}
       <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="max-h-[70vh] overflow-auto">
           <table className="w-full text-sm" style={{ minWidth: 760 }}>
             <thead>
               <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
-                <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl">
-                  Member
+                {HEADERS.map((head, i) => (
+                  <th
+                    key={head.key}
+                    scope="col"
+                    aria-sort={
+                      sort?.key === head.key
+                        ? sort.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : undefined
+                    }
+                    className={`sticky top-0 z-20 bg-sticky py-2.5 font-medium backdrop-blur-xl ${
+                      i === 0 ? "left-0 z-30 px-4" : "px-3"
+                    } ${head.align === "center" ? "text-center" : "text-left"}`}
+                  >
+                    <SortButton
+                      label={head.label}
+                      active={sort?.key === head.key}
+                      dir={sort?.dir ?? "asc"}
+                      onClick={() => toggle(head.key)}
+                    />
+                  </th>
+                ))}
+                <th className="sticky top-0 z-20 bg-sticky px-3 py-2.5 text-right font-medium backdrop-blur-xl">
+                  Account
                 </th>
-                <th className="px-3 py-2.5 font-medium">Role</th>
-                <th className="px-3 py-2.5 font-medium">Sector</th>
-                <th className="px-3 py-2.5 text-center font-medium">Leader</th>
-                <th className="px-3 py-2.5 font-medium">Status</th>
-                <th className="px-3 py-2.5 text-right font-medium">Account</th>
               </tr>
             </thead>
             <tbody>
-              {members.map((m) => (
+              {sorted.map((m) => (
                 <tr
                   key={m.id}
                   className={`border-b border-card-border/50 ${

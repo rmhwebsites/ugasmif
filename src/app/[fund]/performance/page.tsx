@@ -376,6 +376,8 @@ export default async function PerformancePage({
     <div className="space-y-4">
       {header}
 
+      {/* Deliberately unsorted: MTD → SI is the order that carries the
+          meaning, and there are only ever six rows. */}
       <Card className="overflow-hidden">
         <CardHeader
           title="Returns vs benchmark"
@@ -444,19 +446,25 @@ export default async function PerformancePage({
 
       <Card className="overflow-hidden">
         <CardHeader title="Monthly returns" />
-        <div className="overflow-x-auto">
+        {/* Deliberately unsorted: Jan → Dec across, newest year down. A click
+            that reordered the months would only lose the meaning. A fund with
+            twenty years of history still scrolls, so the months stay pinned. */}
+        <div className="max-h-[70vh] overflow-auto">
           <table className="w-full text-xs sm:text-sm">
             <thead>
               <tr className="border-b border-card-border text-[11px] uppercase tracking-wider text-muted">
-                <th className="sticky left-0 z-10 bg-sticky px-4 py-2 text-left font-medium backdrop-blur-xl sm:px-6">
+                <th className="sticky left-0 top-0 z-30 bg-sticky px-4 py-2 text-left font-medium backdrop-blur-xl sm:px-6">
                   Year
                 </th>
                 {MONTH_HEADERS.map((m) => (
-                  <th key={m} className="px-2 py-2 text-right font-medium">
+                  <th
+                    key={m}
+                    className="sticky top-0 z-20 bg-sticky px-2 py-2 text-right font-medium backdrop-blur-xl"
+                  >
                     {m}
                   </th>
                 ))}
-                <th className="px-2 py-2 pr-4 text-right font-medium sm:pr-6">
+                <th className="sticky top-0 z-20 bg-sticky px-2 py-2 pr-4 text-right font-medium backdrop-blur-xl sm:pr-6">
                   Total
                 </th>
               </tr>

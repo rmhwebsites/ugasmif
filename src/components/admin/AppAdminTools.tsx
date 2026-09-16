@@ -6,6 +6,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
+import {
+  SortButton,
+  useSortedRows,
+  type SortableColumn,
+} from "@/components/ui/SortableTable";
 
 export interface AdminUserRow {
   id: string;
@@ -15,6 +20,25 @@ export interface AdminUserRow {
   is_faculty_advisor: boolean;
   memberships: string[];
 }
+
+const USER_HEADERS: { key: string; label: string; align?: "center" }[] = [
+  { key: "user", label: "User" },
+  { key: "memberships", label: "Memberships" },
+  { key: "appAdmin", label: "App admin", align: "center" },
+  { key: "advisor", label: "Advisor", align: "center" },
+];
+
+const USER_SORT: Pick<
+  SortableColumn<AdminUserRow>,
+  "key" | "sortValue" | "defaultDir"
+>[] = [
+  { key: "user", defaultDir: "asc", sortValue: (u) => u.full_name },
+  // By count: the question this column gets asked is who is on nothing and
+  // who is on both funds.
+  { key: "memberships", sortValue: (u) => u.memberships.length },
+  { key: "appAdmin", sortValue: (u) => (u.is_app_admin ? 1 : 0) },
+  { key: "advisor", sortValue: (u) => (u.is_faculty_advisor ? 1 : 0) },
+];
 
 export function UsersTable({
   users,
@@ -57,6 +81,11 @@ export function UsersTable({
       )
     : users;
 
+  const { sorted, sort, toggle } = useSortedRows(filtered, USER_SORT, {
+    key: "user",
+    dir: "asc",
+  });
+
   return (
     <div className="space-y-2">
       <input
@@ -71,23 +100,40 @@ export function UsersTable({
           <table className="w-full text-sm" style={{ minWidth: 640 }}>
             <thead className="sticky top-0 bg-sticky backdrop-blur-xl">
               <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
-                <th className="px-4 py-2.5 font-medium">User</th>
-                <th className="px-3 py-2.5 font-medium">Memberships</th>
-                <th className="px-3 py-2.5 text-center font-medium">
-                  App admin
-                </th>
-                <th className="px-3 py-2.5 text-center font-medium">Advisor</th>
+                {USER_HEADERS.map((head, i) => (
+                  <th
+                    key={head.key}
+                    scope="col"
+                    aria-sort={
+                      sort?.key === head.key
+                        ? sort.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : undefined
+                    }
+                    className={`py-2.5 font-medium ${
+                      i === 0 ? "sticky left-0 z-10 bg-sticky px-4 backdrop-blur-xl" : "px-3"
+                    } ${head.align === "center" ? "text-center" : "text-left"}`}
+                  >
+                    <SortButton
+                      label={head.label}
+                      active={sort?.key === head.key}
+                      dir={sort?.dir ?? "asc"}
+                      onClick={() => toggle(head.key)}
+                    />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => (
+              {sorted.map((u) => (
                 <tr
                   key={u.id}
                   className={`border-b border-card-border/50 ${
                     busyId === u.id ? "opacity-50" : ""
                   }`}
                 >
-                  <td className="px-4 py-2.5">
+                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 backdrop-blur-xl">
                     <p className="font-medium">{u.full_name}</p>
                     <p className="text-xs text-muted">{u.email}</p>
                   </td>

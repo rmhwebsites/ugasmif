@@ -503,11 +503,13 @@ export default async function HoldingDetailPage({
                 payment frequency, and maturity fields under Admin → Holdings.
               </p>
             ) : (
-              <div className="max-h-72 overflow-y-auto">
+              <div className="max-h-72 overflow-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-card-border text-left">
-                      <th className={`${thClass} sticky top-0 bg-sticky backdrop-blur-xl`}>
+                      <th
+                        className={`${thClass} sticky left-0 top-0 z-20 bg-sticky backdrop-blur-xl`}
+                      >
                         Date
                       </th>
                       <th className={`${thClass} sticky top-0 bg-sticky text-right backdrop-blur-xl`}>
@@ -521,7 +523,9 @@ export default async function HoldingDetailPage({
                         key={flow.date.toISOString()}
                         className="border-b border-card-border/50"
                       >
-                        <td className={tdClass}>
+                        <td
+                          className={`${tdClass} sticky left-0 z-10 bg-sticky backdrop-blur-xl`}
+                        >
                           {formatDate(flow.date)}
                           {i === schedule.length - 1 && (
                             <span className="ml-2 text-[11px] text-muted">

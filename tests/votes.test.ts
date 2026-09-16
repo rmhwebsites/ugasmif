@@ -60,6 +60,19 @@ describe("voteRule", () => {
     });
   });
 
+  it("treats absent columns like nulls", () => {
+    // Before migration 0004 lands, select("*") returns no such columns at
+    // all; reading undefined as "frozen" would render NaN%.
+    expect(voteRule({}, fund(60, 25))).toEqual({
+      thresholdPct: 60,
+      quorumPct: 25,
+    });
+    expect(voteRule({ threshold_pct: 70 }, fund(60, 25))).toEqual({
+      thresholdPct: 70,
+      quorumPct: null,
+    });
+  });
+
   it("treats a zero threshold as frozen, not missing", () => {
     expect(voteRule(pitch(0, null), fund(60, 50)).thresholdPct).toBe(0);
   });

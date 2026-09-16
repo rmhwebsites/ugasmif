@@ -8,8 +8,42 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { HoldingForm } from "@/components/admin/HoldingForm";
 import { MarkEntry } from "@/components/admin/MarkEntry";
+import {
+  SortButton,
+  useSortedRows,
+  type SortableColumn,
+} from "@/components/ui/SortableTable";
 import { formatBondPrice, formatDate, formatNumber } from "@/lib/format";
 import type { BondMark, Holding, Sector } from "@/types/domain";
+
+interface AdminRow {
+  h: Holding;
+  sectorName: string;
+  markedAt: string | null;
+}
+
+/** Sort keys only — HoldingsAdmin renders its own body. */
+const SORT_COLUMNS: Pick<
+  SortableColumn<AdminRow>,
+  "key" | "sortValue" | "defaultDir"
+>[] = [
+  { key: "holding", defaultDir: "asc", sortValue: (r) => r.h.symbol ?? r.h.name },
+  { key: "type", defaultDir: "asc", sortValue: (r) => r.h.instrument_type },
+  { key: "sector", defaultDir: "asc", sortValue: (r) => r.sectorName },
+  { key: "quantity", sortValue: (r) => Number(r.h.quantity) },
+  { key: "pricing", defaultDir: "asc", sortValue: (r) => r.h.pricing_method },
+  // Null last, so the holdings with no mark at all surface at one end.
+  { key: "mark", sortValue: (r) => r.markedAt },
+];
+
+const HEADERS: { key: string; label: string; align?: "right" }[] = [
+  { key: "holding", label: "Holding" },
+  { key: "type", label: "Type" },
+  { key: "sector", label: "Sector" },
+  { key: "quantity", label: "Qty / Face", align: "right" },
+  { key: "pricing", label: "Pricing" },
+  { key: "mark", label: "Latest mark" },
+];
 
 export function HoldingsAdmin({
   fund,
@@ -32,6 +66,16 @@ export function HoldingsAdmin({
   const sectorName = (id: string | null) =>
     sectors.find((s) => s.id === id)?.name ?? "—";
 
+  const rows: AdminRow[] = holdings.map((h) => ({
+    h,
+    sectorName: sectorName(h.sector_id),
+    markedAt: latestMarks[h.id]?.marked_at ?? null,
+  }));
+  const { sorted, sort, toggle } = useSortedRows(rows, SORT_COLUMNS, {
+    key: "holding",
+    dir: "asc",
+  });
+
   async function toggleActive(h: Holding) {
     const verb = h.is_active ? "Deactivate" : "Reactivate";
     if (!window.confirm(`${verb} ${h.name}?`)) return;
@@ -45,23 +89,40 @@ export function HoldingsAdmin({
 
   return (
     <div className="glass-card overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="max-h-[70vh] overflow-auto">
         <table className="w-full text-sm" style={{ minWidth: 640 }}>
           <thead>
             <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
-              <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl">
-                Holding
+              {HEADERS.map((head, i) => (
+                <th
+                  key={head.key}
+                  scope="col"
+                  aria-sort={
+                    sort?.key === head.key
+                      ? sort.dir === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : undefined
+                  }
+                  className={`sticky top-0 z-20 bg-sticky py-2.5 font-medium backdrop-blur-xl ${
+                    i === 0 ? "left-0 z-30 px-4" : "px-3"
+                  } ${head.align === "right" ? "text-right" : "text-left"}`}
+                >
+                  <SortButton
+                    label={head.label}
+                    active={sort?.key === head.key}
+                    dir={sort?.dir ?? "asc"}
+                    onClick={() => toggle(head.key)}
+                  />
+                </th>
+              ))}
+              <th className="sticky top-0 z-20 bg-sticky px-3 py-2.5 text-right font-medium backdrop-blur-xl">
+                Actions
               </th>
-              <th className="px-3 py-2.5 font-medium">Type</th>
-              <th className="px-3 py-2.5 font-medium">Sector</th>
-              <th className="px-3 py-2.5 text-right font-medium">Qty / Face</th>
-              <th className="px-3 py-2.5 font-medium">Pricing</th>
-              <th className="px-3 py-2.5 font-medium">Latest mark</th>
-              <th className="px-3 py-2.5 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {holdings.map((h) => {
+            {sorted.map(({ h }) => {
               const mark = latestMarks[h.id];
               const markStale =
                 h.pricing_method === "manual" &&

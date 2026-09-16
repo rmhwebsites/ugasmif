@@ -14,6 +14,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { sortByValue } from "@/lib/sort";
 
 export interface SortableColumn<T> {
   key: string;
@@ -36,6 +37,72 @@ export interface SortState {
 
 /** Shared by the header cell and the body cell of the pinned first column. */
 const STICKY_CELL = "sticky left-0 bg-sticky backdrop-blur-xl";
+
+/**
+ * Sorting for a table whose body this component cannot render — expandable
+ * rows, grouped rows. Same comparison as SortableTable, so a column sorts the
+ * same way wherever it lives.
+ */
+export function useSortedRows<T>(
+  rows: T[],
+  columns: Pick<SortableColumn<T>, "key" | "sortValue" | "defaultDir">[],
+  initial?: SortState
+): {
+  sorted: T[];
+  sort: SortState | null;
+  toggle: (key: string) => void;
+} {
+  const [sort, setSort] = useState<SortState | null>(initial ?? null);
+
+  const sorted = useMemo(() => {
+    if (!sort) return rows;
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col?.sortValue) return rows;
+    return sortByValue(rows, col.sortValue, sort.dir);
+  }, [rows, columns, sort]);
+
+  function toggle(key: string) {
+    const col = columns.find((c) => c.key === key);
+    if (!col?.sortValue) return;
+    setSort((prev) =>
+      prev?.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: col.defaultDir ?? "desc" }
+    );
+  }
+
+  return { sorted, sort, toggle };
+}
+
+/** The clickable part of a sortable header, for a hand-rolled `th`. */
+export function SortButton({
+  label,
+  active,
+  dir,
+  onClick,
+}: {
+  label: ReactNode;
+  active: boolean;
+  dir: "asc" | "desc";
+  onClick: () => void;
+}) {
+  const Icon = active ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap uppercase tracking-wider transition-colors hover:text-foreground ${
+        active ? "text-foreground" : ""
+      }`}
+    >
+      {label}
+      <Icon
+        className={`h-3 w-3 ${active ? "text-accent" : "opacity-40"}`}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
 
 export function SortableTable<T>({
   rows,
@@ -68,22 +135,7 @@ export function SortableTable<T>({
     if (!sort) return rows;
     const col = columns.find((c) => c.key === sort.key);
     if (!col?.sortValue) return rows;
-    const read = col.sortValue;
-    const withVal = rows.map((row) => ({ row, s: read(row) }));
-    const nonNull = withVal.filter((x) => x.s !== null && x.s !== "");
-    const nulls = withVal.filter((x) => x.s === null || x.s === "");
-    nonNull.sort((a, b) => {
-      const av = a.s as string | number;
-      const bv = b.s as string | number;
-      const cmp =
-        typeof av === "number" && typeof bv === "number"
-          ? av - bv
-          : String(av).localeCompare(String(bv));
-      return sort.dir === "asc" ? cmp : -cmp;
-    });
-    // Blanks last in both directions: "sort by maturity" should not open with
-    // a screenful of equities that have none.
-    return [...nonNull, ...nulls].map((x) => x.row);
+    return sortByValue(rows, col.sortValue, sort.dir);
   }, [rows, columns, sort]);
 
   function toggleSort(col: SortableColumn<T>) {
@@ -112,11 +164,6 @@ export function SortableTable<T>({
           <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted sm:text-xs">
             {columns.map((col, i) => {
               const active = sort?.key === col.key;
-              const Icon = active
-                ? sort.dir === "asc"
-                  ? ArrowUp
-                  : ArrowDown
-                : ArrowUpDown;
               const alignRight = col.align !== "left";
               return (
                 <th
@@ -138,21 +185,12 @@ export function SortableTable<T>({
                   }`}
                 >
                   {col.sortValue ? (
-                    <button
-                      type="button"
+                    <SortButton
+                      label={col.label}
+                      active={active}
+                      dir={sort?.dir ?? "desc"}
                       onClick={() => toggleSort(col)}
-                      className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap uppercase tracking-wider transition-colors hover:text-foreground ${
-                        active ? "text-foreground" : ""
-                      }`}
-                    >
-                      {col.label}
-                      <Icon
-                        className={`h-3 w-3 ${
-                          active ? "text-accent" : "opacity-40"
-                        }`}
-                        aria-hidden="true"
-                      />
-                    </button>
+                    />
                   ) : (
                     <span className="whitespace-nowrap">{col.label}</span>
                   )}

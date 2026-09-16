@@ -19,12 +19,16 @@ export interface VoteRule {
 }
 
 export function voteRule(
-  pitch: Pick<Pitch, "threshold_pct" | "quorum_pct">,
+  pitch: Partial<Pick<Pitch, "threshold_pct" | "quorum_pct">>,
   fund: Pick<Fund, "vote_pass_threshold_pct" | "vote_quorum_pct">
 ): VoteRule {
-  const frozen = pitch.threshold_pct !== null;
+  // Undefined, not just null: a select("*") against a database that has not
+  // run migration 0004 yet comes back without the columns at all, and reading
+  // that as "frozen" would put NaN on the page.
+  const frozen =
+    pitch.threshold_pct !== null && pitch.threshold_pct !== undefined;
   const threshold = frozen ? pitch.threshold_pct : fund.vote_pass_threshold_pct;
-  const quorum = frozen ? pitch.quorum_pct : fund.vote_quorum_pct;
+  const quorum = frozen ? pitch.quorum_pct ?? null : fund.vote_quorum_pct;
   return {
     thresholdPct: Number(threshold),
     quorumPct: quorum === null ? null : Number(quorum),
