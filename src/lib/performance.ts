@@ -21,6 +21,27 @@ export interface PeriodReturn {
   diff: number | null;
 }
 
+export interface SectorContribution {
+  sectorName: string;
+  /** Sum of the sector's holding weights at the start of the window. */
+  startWeightPct: number;
+  /** Weighted return of those holdings over the window. */
+  returnPct: number;
+  /** startWeightPct × returnPct / 100 — points of fund return. */
+  contributionPct: number;
+}
+
+export interface SectorAttribution {
+  /** Snapshot the window is measured from, and the latest snapshot. */
+  startDate: string;
+  endDate: string;
+  rows: SectorContribution[];
+  totalPct: number;
+  /** Start weight the rows actually explain; the rest is cash and positions
+   *  that were not priced in both snapshots. */
+  coveredWeightPct: number;
+}
+
 const MS_PER_DAY = 86_400_000;
 const TRADING_DAYS_PER_YEAR = 252;
 const DEFAULT_PERIODS = ["MTD", "QTD", "YTD", "LTM", "3Y", "SI"];
@@ -290,6 +311,103 @@ export function monthlyReturnTable(
       const yearLinked = chain(buckets.flat());
       return { year, months, total: yearLinked !== null ? yearLinked * 100 : null };
     });
+}
+
+/** One holding line inside fund_snapshots.detail, as the EOD cron writes it.
+ *  Only id/price/weightPct are read here, and rows written by earlier versions
+ *  of the cron may be missing any of them, so every field is checked. */
+interface SnapshotHolding {
+  price: number;
+  weightPct: number;
+}
+
+function snapshotHoldings(s: FundSnapshot): Map<string, SnapshotHolding> {
+  const out = new Map<string, SnapshotHolding>();
+  const detail = s.detail as Record<string, unknown> | null;
+  const raw = detail?.["holdings"];
+  if (!Array.isArray(raw)) return out;
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const row = item as { id?: unknown; price?: unknown; weightPct?: unknown };
+    if (typeof row.id !== "string") continue;
+    const price = Number(row.price);
+    const weightPct = Number(row.weightPct);
+    if (!(price > 0) || !Number.isFinite(weightPct)) continue;
+    out.set(row.id, { price, weightPct });
+  }
+  return out;
+}
+
+/**
+ * Contribution to return by sector over a period (SPEC 14): start weight ×
+ * holding return, summed by sector. Prices come from the holding lines the EOD
+ * cron writes into `fund_snapshots.detail`, so attribution only exists for the
+ * days the cron has run. The base snapshot is the last one BEFORE the window —
+ * the same anchor the period returns chain from — or the first snapshot when
+ * history begins inside the window.
+ *
+ * `sectorByHoldingId` maps holding id → sector name (from valueFund()).
+ * Positions opened or closed inside the window have no start weight or no end
+ * price and are skipped, so the rows do not tie exactly to the fund's period
+ * return — cash, trades, and income sit in the difference, and
+ * `coveredWeightPct` says how much of the portfolio the rows explain. Null
+ * when no two snapshots carry holding detail.
+ */
+export function sectorAttribution(
+  snapshots: FundSnapshot[],
+  sectorByHoldingId: Map<string, string>,
+  label = "YTD",
+  unclassifiedName = "Unclassified"
+): SectorAttribution | null {
+  const sorted = sortSnapshots(snapshots);
+  if (sorted.length < 2) return null;
+
+  const end = sorted[sorted.length - 1];
+  const endDate = end.snapshot_date.slice(0, 10);
+  const start = periodStart(label, endDate);
+  const base =
+    start === null
+      ? sorted[0]
+      : [...sorted]
+          .reverse()
+          .find((s) => s.snapshot_date.slice(0, 10) < start) ?? sorted[0];
+  if (base.snapshot_date >= end.snapshot_date) return null;
+
+  const startHoldings = snapshotHoldings(base);
+  const endHoldings = snapshotHoldings(end);
+  if (startHoldings.size === 0 || endHoldings.size === 0) return null;
+
+  const bySector = new Map<string, { weight: number; contribution: number }>();
+  let coveredWeightPct = 0;
+  for (const [id, from] of startHoldings) {
+    const to = endHoldings.get(id);
+    if (!to) continue; // sold during the window: no end price to return on
+    const name = sectorByHoldingId.get(id) ?? unclassifiedName;
+    const contribution = from.weightPct * (to.price / from.price - 1);
+    const agg = bySector.get(name) ?? { weight: 0, contribution: 0 };
+    agg.weight += from.weightPct;
+    agg.contribution += contribution;
+    bySector.set(name, agg);
+    coveredWeightPct += from.weightPct;
+  }
+  if (bySector.size === 0) return null;
+
+  const rows: SectorContribution[] = [...bySector.entries()]
+    .map(([sectorName, agg]) => ({
+      sectorName,
+      startWeightPct: agg.weight,
+      returnPct: agg.weight !== 0 ? (agg.contribution / agg.weight) * 100 : 0,
+      contributionPct: agg.contribution,
+    }))
+    .sort((a, b) => b.contributionPct - a.contributionPct);
+
+  return {
+    startDate: base.snapshot_date.slice(0, 10),
+    endDate,
+    rows,
+    totalPct: rows.reduce((s, r) => s + r.contributionPct, 0),
+    coveredWeightPct,
+  };
 }
 
 /**

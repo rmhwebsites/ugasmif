@@ -81,13 +81,30 @@ export function inSector(ctx: FundContext, sectorId: string): boolean {
 }
 
 /**
+ * Leads the fund's strategy team (Equity Strategies / Macro). Mirrors the SQL
+ * helper `leads_strategy_team(fund)`: the test is about the caller's own
+ * sector, and it licenses targets for every sector in the fund — target rows
+ * name ordinary sectors, never the strategy team itself.
+ */
+export function leadsStrategyTeam(ctx: FundContext): boolean {
+  return (
+    ctx.sector !== null &&
+    ctx.sector.is_strategy_team &&
+    ctx.sector.is_active &&
+    leadsSector(ctx, ctx.sector.id)
+  );
+}
+
+/**
  * The permission matrix. `sectorId` scopes sector-bound actions
- * (draft/submit/withdraw pitch, set targets for a strategy team's leader).
+ * (draft/submit/withdraw pitch). `isStrategyLeader` answers "does this caller
+ * lead the fund's strategy team?" for callers that already resolved it;
+ * otherwise it is read off the context.
  */
 export function can(
   ctx: FundContext,
   action: PermissionAction,
-  opts: { sectorId?: string; isStrategySector?: boolean } = {}
+  opts: { sectorId?: string; isStrategyLeader?: boolean } = {}
 ): boolean {
   const role = effectiveRole(ctx);
   const officer = isOfficer(ctx);
@@ -132,12 +149,9 @@ export function can(
 
     case "set_sector_targets":
       if (officer || ctx.isAppAdmin) return true;
-      // Equity Strategies / Macro leader may set targets
-      return (
-        opts.isStrategySector === true &&
-        opts.sectorId !== undefined &&
-        leadsSector(ctx, opts.sectorId)
-      );
+      // The Equity Strategies / Macro leader sets the whole fund's targets,
+      // not only their own sector's row.
+      return opts.isStrategyLeader ?? leadsStrategyTeam(ctx);
 
     case "manage_fund_settings":
       return officer || ctx.isAppAdmin;

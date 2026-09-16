@@ -24,6 +24,9 @@ export function SectorsAdmin({
 }) {
   const router = useRouter();
   const [newName, setNewName] = useState("");
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
 
   async function patch(id: string, body: Record<string, unknown>) {
@@ -58,6 +61,16 @@ export function SectorsAdmin({
     router.refresh();
   }
 
+  async function commitRename(e: React.FormEvent) {
+    e.preventDefault();
+    if (!renaming) return;
+    const name = renaming.name.trim();
+    const current = sectors.find((s) => s.id === renaming.id);
+    setRenaming(null);
+    if (name === "" || current === undefined || name === current.name) return;
+    await patch(renaming.id, { name });
+  }
+
   async function move(index: number, dir: -1 | 1) {
     const other = index + dir;
     if (other < 0 || other >= sectors.length) return;
@@ -77,8 +90,26 @@ export function SectorsAdmin({
               s.is_active ? "" : "opacity-45"
             }`}
           >
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-medium">{s.name}</span>
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {renaming?.id === s.id ? (
+                <form onSubmit={commitRename} className="min-w-0 flex-1">
+                  <input
+                    autoFocus
+                    value={renaming.name}
+                    onChange={(e) =>
+                      setRenaming({ id: s.id, name: e.target.value })
+                    }
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setRenaming(null);
+                    }}
+                    aria-label={`Rename ${s.name}`}
+                    className={`${inputClass} py-1 text-sm`}
+                  />
+                </form>
+              ) : (
+                <span className="truncate font-medium">{s.name}</span>
+              )}
               {s.is_strategy_team && (
                 <Badge className="shrink-0" tone="info">
                   strategy team
@@ -107,6 +138,13 @@ export function SectorsAdmin({
                   aria-label={`Move ${s.name} down`}
                 >
                   <ArrowDown className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRenaming({ id: s.id, name: s.name })}
+                  className="cursor-pointer whitespace-nowrap text-xs text-muted hover:underline"
+                >
+                  rename
                 </button>
                 <button
                   type="button"

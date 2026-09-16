@@ -16,6 +16,14 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({ userId: z.uuid() });
 
+// Resend sends `properties.action_link` verbatim, so redirect_to has to be set
+// here: omitted, Supabase's verify endpoint falls back to the project Site URL
+// and the member never reaches the reset screen (SPEC 7, 11.1).
+function recoveryRedirectTo(): string | undefined {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, "");
+  return base ? `${base}/auth/reset` : undefined;
+}
+
 export async function POST(request: NextRequest) {
   const { user, profile } = await getAuthState();
   if (!user || !profile) {
@@ -55,10 +63,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Member not found." }, { status: 404 });
   }
 
+  const redirectTo = recoveryRedirectTo();
   const { data: linkData, error: linkError } =
     await service.auth.admin.generateLink({
       type: "recovery",
       email: target.email,
+      options: redirectTo ? { redirectTo } : undefined,
     });
   if (linkError || !linkData?.properties?.action_link) {
     return NextResponse.json(

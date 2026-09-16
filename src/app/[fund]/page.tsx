@@ -1,5 +1,6 @@
 // Fund dashboard (SPEC 11.2): totals, day change, cash, value-vs-benchmark
-// chart, top/bottom movers, sector allocation, open-votes banner, next
+// chart, top/bottom movers, sector allocation, the largest positions (the
+// full table lives on /[fund]/holdings), open-votes banner, next
 // meeting, latest update. Arch adds weighted duration/YTM, allocation by
 // instrument type, and the Treasury rates strip. Server component — data
 // comes straight from valueFund() and user-scoped Supabase queries; the
@@ -19,6 +20,7 @@ import { timeWeightedReturns } from "@/lib/performance";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
+import { HoldingsTable } from "@/components/holdings/HoldingsTable";
 import { SectorBarChart } from "@/components/charts/SectorBarChart";
 import { AllocationDonut } from "@/components/charts/AllocationDonut";
 import { RatesStrip } from "@/components/charts/RatesStrip";
@@ -187,6 +189,12 @@ export default async function DashboardPage({
   if (v.cash > 0) donutData.push({ name: "Cash", value: v.cash });
 
   const cashWeight = v.totalValue > 0 ? (v.cash / v.totalValue) * 100 : 0;
+
+  // The dashboard shows the ten largest positions; /[fund]/holdings has the
+  // full table with filters and export.
+  const topHoldings = [...v.holdings]
+    .sort((a, b) => b.weightPct - a.weightPct)
+    .slice(0, 10);
 
   return (
     <div className="space-y-4">
@@ -400,6 +408,34 @@ export default async function DashboardPage({
           </div>
         </Card>
       </div>
+
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Largest positions"
+          action={
+            <Link
+              href={`/${slug}/holdings`}
+              className="text-xs font-medium text-accent hover:underline"
+            >
+              {v.holdings.length > topHoldings.length
+                ? `All ${v.holdings.length} holdings`
+                : "All holdings"}
+            </Link>
+          }
+        />
+        {topHoldings.length > 0 ? (
+          <HoldingsTable
+            holdings={topHoldings}
+            fund={fund.slug}
+            assetClass={fund.asset_class}
+            compact
+          />
+        ) : (
+          <p className="px-4 py-8 text-center text-sm text-muted">
+            No positions yet. The PM adds holdings under Fund Admin → Holdings.
+          </p>
+        )}
+      </Card>
 
       {isFixedIncome && (
         <Card>

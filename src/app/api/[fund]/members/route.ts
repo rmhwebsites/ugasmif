@@ -14,6 +14,17 @@ import { logAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
+// The invite goes out through Resend carrying `properties.action_link`
+// verbatim, so Supabase never renders its own template and the token_hash
+// path handled by /auth/confirm is never used. action_link is
+// `auth/v1/verify?...&redirect_to=...` and redirect_to falls back to the
+// project Site URL when the option is omitted, which would drop the invited
+// member on the app root instead of the set-password screen (SPEC 7, 11.1).
+function inviteRedirectTo(): string | undefined {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, "");
+  return base ? `${base}/auth/set-password` : undefined;
+}
+
 const bodySchema = z.object({
   email: z.string().email().transform((e) => e.trim().toLowerCase()),
   full_name: z.string().trim().min(1).max(120),
@@ -118,9 +129,11 @@ export async function POST(
     }
     userId = created.user.id;
 
+    const redirectTo = inviteRedirectTo();
     const { data: linkData } = await service.auth.admin.generateLink({
       type: "invite",
       email: body.email,
+      options: redirectTo ? { redirectTo } : undefined,
     });
     const actionLink = linkData?.properties?.action_link;
     if (actionLink) {

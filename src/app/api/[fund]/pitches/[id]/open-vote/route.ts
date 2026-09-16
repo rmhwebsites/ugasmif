@@ -1,17 +1,21 @@
 // POST /api/[fund]/pitches/[id]/open-vote — submitted/scheduled → voting
-// (SPEC Section 12). Officers only. Sets vote_opens_at = now and
-// vote_closes_at = now + fund.vote_default_window_hours (overridable via
-// window_hours), freezes eligible_voters (active members, role != viewer),
-// and emails every eligible voter — always sent.
+// (SPEC Section 12). Officers only. The transition's side effects live in
+// openPitchVote() below: vote_opens_at = now, vote_closes_at = now +
+// fund.vote_default_window_hours (overridable via window_hours), frozen
+// eligible_voters (active members, role != viewer), audit, and an email to
+// every eligible voter — always sent. The auto-open cron
+// (/api/cron/votes) calls the same function so the manual and automatic
+// paths cannot drift.
 
 import { NextRequest, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { getAuthState, getFundContext } from "@/lib/fund";
 import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { sendToFund } from "@/lib/emails/send";
 import { formatDateTime } from "@/lib/format";
-import type { MembershipRole, Pitch } from "@/types/domain";
+import type { Fund, MembershipRole, Pitch } from "@/types/domain";
 
 const bodySchema = z.object({
   /** Override of fund.vote_default_window_hours for this vote. */
@@ -26,6 +30,106 @@ const VOTER_ROLES: MembershipRole[] = [
   "sector_leader",
   "analyst",
 ];
+
+export interface OpenVoteResult {
+  pitch: Pitch;
+  eligibleVoters: number;
+  windowHours: number;
+  closesAt: Date;
+}
+
+/**
+ * Opens voting on one pitch and applies every side effect the spec lists for
+ * the transition. The caller has already checked permission and that the
+ * pitch is in an openable state; a failed update throws.
+ */
+export async function openPitchVote(
+  supabase: SupabaseClient,
+  {
+    fund,
+    yearId,
+    pitch,
+    actorId,
+    windowHours,
+  }: {
+    fund: Fund;
+    /** Academic year the eligible-voter count is taken from. */
+    yearId: string;
+    pitch: Pitch;
+    actorId: string | null;
+    windowHours?: number;
+  }
+): Promise<OpenVoteResult> {
+  // Freeze the voting population now, so the stored result never depends on
+  // later roster edits (SPEC Section 12 rules).
+  const { count } = await supabase
+    .from("memberships")
+    .select("id", { count: "exact", head: true })
+    .eq("fund_id", fund.id)
+    .eq("academic_year_id", yearId)
+    .eq("status", "active")
+    .neq("role", "viewer");
+  const eligible = count ?? 0;
+
+  const fundDefault = Number(fund.vote_default_window_hours);
+  const hours =
+    windowHours ??
+    (Number.isFinite(fundDefault) && fundDefault >= 1 ? fundDefault : 24);
+  const opens = new Date();
+  const closes = new Date(opens.getTime() + hours * 3_600_000);
+
+  const { data: updated, error } = await supabase
+    .from("pitches")
+    .update({
+      status: "voting",
+      vote_opens_at: opens.toISOString(),
+      vote_closes_at: closes.toISOString(),
+      eligible_voters: eligible,
+    })
+    .eq("id", pitch.id)
+    .select("*")
+    .single();
+  if (error || !updated) {
+    throw new Error(error?.message ?? "Voting could not be opened");
+  }
+
+  await logAudit(supabase, {
+    actorId,
+    fundId: fund.id,
+    action: "pitch.open_vote",
+    entity: "pitches",
+    entityId: pitch.id,
+    before: { status: pitch.status },
+    after: {
+      status: "voting",
+      vote_opens_at: opens.toISOString(),
+      vote_closes_at: closes.toISOString(),
+      eligible_voters: eligible,
+      window_hours: hours,
+    },
+  });
+
+  // "Vote open" is one of the always-sent emails (SPEC Section 16).
+  await sendToFund(supabase, fund.id, {
+    subject: `Vote open: ${pitch.title} — closes ${formatDateTime(closes)} ET`,
+    heading: "A vote is open",
+    bodyLines: [
+      `Voting on "${pitch.title}" is open now and closes ${formatDateTime(closes)} ET.`,
+      "You can change your ballot any time before it closes.",
+    ],
+    ctaLabel: "Cast your vote",
+    ctaPath: `/${fund.slug}/pitches/${pitch.id}`,
+    roles: VOTER_ROLES,
+    essential: true,
+  });
+
+  return {
+    pitch: updated as Pitch,
+    eligibleVoters: eligible,
+    windowHours: hours,
+    closesAt: closes,
+  };
+}
 
 export async function POST(
   request: NextRequest,
@@ -80,71 +184,18 @@ export async function POST(
     );
   }
 
-  // Freeze the voting population now, so the stored result never depends on
-  // later roster edits (SPEC Section 12 rules).
-  const { count } = await supabase
-    .from("memberships")
-    .select("id", { count: "exact", head: true })
-    .eq("fund_id", ctx.fund.id)
-    .eq("academic_year_id", ctx.currentYear.id)
-    .eq("status", "active")
-    .neq("role", "viewer");
-  const eligible = count ?? 0;
-
-  const fundDefault = Number(ctx.fund.vote_default_window_hours);
-  const hours =
-    parsed.data.window_hours ??
-    (Number.isFinite(fundDefault) && fundDefault >= 1 ? fundDefault : 24);
-  const opens = new Date();
-  const closes = new Date(opens.getTime() + hours * 3_600_000);
-
-  const { data: updated, error } = await supabase
-    .from("pitches")
-    .update({
-      status: "voting",
-      vote_opens_at: opens.toISOString(),
-      vote_closes_at: closes.toISOString(),
-      eligible_voters: eligible,
-    })
-    .eq("id", pitch.id)
-    .select("*")
-    .single();
-  if (error || !updated) {
-    return NextResponse.json(
-      { error: error?.message ?? "Voting could not be opened" },
-      { status: 400 }
-    );
+  try {
+    const result = await openPitchVote(supabase, {
+      fund: ctx.fund,
+      yearId: ctx.currentYear.id,
+      pitch,
+      actorId: user.id,
+      windowHours: parsed.data.window_hours,
+    });
+    return NextResponse.json({ pitch: result.pitch });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Voting could not be opened";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
-
-  await logAudit(supabase, {
-    actorId: user.id,
-    fundId: ctx.fund.id,
-    action: "pitch.open_vote",
-    entity: "pitches",
-    entityId: pitch.id,
-    before: { status: pitch.status },
-    after: {
-      status: "voting",
-      vote_opens_at: opens.toISOString(),
-      vote_closes_at: closes.toISOString(),
-      eligible_voters: eligible,
-      window_hours: hours,
-    },
-  });
-
-  // "Vote open" is one of the always-sent emails (SPEC Section 16).
-  await sendToFund(supabase, ctx.fund.id, {
-    subject: `Vote open: ${pitch.title} — closes ${formatDateTime(closes)} ET`,
-    heading: "A vote is open",
-    bodyLines: [
-      `Voting on "${pitch.title}" is open now and closes ${formatDateTime(closes)} ET.`,
-      "You can change your ballot any time before it closes.",
-    ],
-    ctaLabel: "Cast your vote",
-    ctaPath: `/${ctx.fund.slug}/pitches/${pitch.id}`,
-    roles: VOTER_ROLES,
-    essential: true,
-  });
-
-  return NextResponse.json({ pitch: updated as Pitch });
 }

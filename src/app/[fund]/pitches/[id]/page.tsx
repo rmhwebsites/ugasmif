@@ -186,6 +186,13 @@ function renderMarkdown(md: string): ReactNode[] {
 interface PitchDetail extends Pitch {
   sector: { name: string } | null;
   author: { full_name: string } | null;
+  /**
+   * The pass rule frozen at close (migration 0004) — null on pitches closed
+   * before it existed, and on votes that have not closed. Declared here until
+   * @/types/domain carries the columns.
+   */
+  threshold_pct: number | null;
+  quorum_pct: number | null;
 }
 
 interface VoteRow {
@@ -223,8 +230,15 @@ export default async function PitchDetailPage({
   const canViewIndividual = can(ctx, "view_individual_votes");
   const closedOrDone = ["passed", "failed", "executed"].includes(pitch.status);
 
-  const [filesRes, votesRes, pairedRes, reverseRes, ticketRes, meetingsRes] =
-    await Promise.all([
+  const [
+    filesRes,
+    votesRes,
+    pairedRes,
+    reverseRes,
+    ticketRes,
+    meetingsRes,
+    ballotCountRes,
+  ] = await Promise.all([
       supabase
         .from("pitch_files")
         .select("*")
@@ -264,6 +278,13 @@ export default async function PitchDetailPage({
         .gte("meeting_date", easternDateString())
         .order("meeting_date")
         .limit(6),
+      // Members may see how many ballots are in while a vote is open, never
+      // the split (SPEC Section 12). RLS hides other members' rows, so the
+      // total comes from the security-definer RPC; officers already have
+      // every row and count them below.
+      pitch.status === "voting" && !canViewIndividual
+        ? supabase.rpc("pitch_vote_count", { p_pitch_id: pitch.id })
+        : Promise.resolve({ data: null }),
     ]);
 
   const files = (filesRes.data as PitchFile[] | null) ?? [];
@@ -286,6 +307,21 @@ export default async function PitchDetailPage({
     comment: v.comment,
     castAt: v.cast_at,
   }));
+  const rpcBallots = ballotCountRes.data;
+  const ballotsCast = typeof rpcBallots === "number" ? rpcBallots : null;
+
+  // The threshold and quorum a closed vote was judged under are frozen on the
+  // pitch, so history never moves with fund settings (SPEC Section 12). Open
+  // votes — and pitches closed before migration 0004 — read the fund's
+  // current rule.
+  const frozenThreshold = pitch.threshold_pct ?? null;
+  const thresholdPct =
+    frozenThreshold !== null
+      ? Number(frozenThreshold)
+      : Number(ctx.fund.vote_pass_threshold_pct);
+  const frozenQuorum =
+    frozenThreshold !== null ? pitch.quorum_pct : ctx.fund.vote_quorum_pct;
+  const quorumPct = frozenQuorum === null ? null : Number(frozenQuorum);
 
   const paired =
     (pairedRes.data as { id: string; title: string; status: string } | null) ??
@@ -545,12 +581,8 @@ export default async function PitchDetailPage({
             votesNo={pitch.votes_no}
             resultPct={pitch.result_pct === null ? null : Number(pitch.result_pct)}
             eligibleVoters={pitch.eligible_voters}
-            thresholdPct={Number(ctx.fund.vote_pass_threshold_pct)}
-            quorumPct={
-              ctx.fund.vote_quorum_pct === null
-                ? null
-                : Number(ctx.fund.vote_quorum_pct)
-            }
+            thresholdPct={thresholdPct}
+            quorumPct={quorumPct}
             canVote={pitch.status === "voting" && voteBlockedReason === null}
             voteBlockedReason={voteBlockedReason}
             canViewIndividual={canViewIndividual}
@@ -559,6 +591,7 @@ export default async function PitchDetailPage({
                 ? { choice: myVoteRow.choice, comment: myVoteRow.comment }
                 : null
             }
+            ballotsCast={ballotsCast}
             liveYes={canViewIndividual ? liveYes : null}
             liveNo={canViewIndividual ? liveNo : null}
             voters={canViewIndividual ? voters : null}

@@ -9,17 +9,34 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { valueFund } from "@/lib/valuation";
 import { can, inSector, isOfficer } from "@/lib/permissions";
 import { HoldingsTable } from "@/components/holdings/HoldingsTable";
+import { ValueChart } from "@/components/charts/ValueChart";
 import { PitchCard, type PitchListItem } from "@/components/pitch/PitchCard";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatPercent } from "@/lib/format";
-import type { Membership, Profile, Sector } from "@/types/domain";
+import type {
+  ChartPoint,
+  FundSnapshot,
+  FundSnapshotDetail,
+  Membership,
+  Profile,
+  Sector,
+} from "@/types/domain";
 
 export const metadata: Metadata = { title: "Sector" };
 
 type MemberRow = Membership & {
   profiles: Pick<Profile, "full_name" | "email"> | null;
 };
+
+type SnapshotRow = Pick<FundSnapshot, "snapshot_date" | "detail">;
+
+/** jsonb numbers arrive as numbers or numeric strings; anything else is a gap. */
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
 export default async function SectorWorkspacePage({
   params,
@@ -40,7 +57,7 @@ export default async function SectorWorkspacePage({
   const sector = sectorRow as Sector | null;
   if (!sector) notFound();
 
-  const [valuation, membersRes, pitchesRes] = await Promise.all([
+  const [valuation, membersRes, pitchesRes, snapshotsRes] = await Promise.all([
     valueFund(supabase, ctx.fund.id),
     supabase
       .from("memberships")
@@ -56,6 +73,11 @@ export default async function SectorWorkspacePage({
       .eq("fund_id", ctx.fund.id)
       .eq("sector_id", sector.id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("fund_snapshots")
+      .select("snapshot_date, detail")
+      .eq("fund_id", ctx.fund.id)
+      .order("snapshot_date", { ascending: true }),
   ]);
 
   const members = (membersRes.data as MemberRow[]) ?? [];
@@ -73,6 +95,43 @@ export default async function SectorWorkspacePage({
       p.author_id === ctx.profile.id ||
       isOfficer(ctx)
   );
+
+  // Weight vs target/benchmark over time: the nightly snapshot records every
+  // sector's weight, target and benchmark weight in its detail jsonb, so the
+  // history is a scan of fund_snapshots rather than a recomputation.
+  const snapshots = (snapshotsRes.data as SnapshotRow[]) ?? [];
+  const weightPoints: ChartPoint[] = [];
+  const targetPoints: ChartPoint[] = [];
+  const benchmarkPoints: ChartPoint[] = [];
+  for (const snap of snapshots) {
+    const detail = snap.detail as FundSnapshotDetail;
+    const row = Array.isArray(detail.sectors)
+      ? detail.sectors.find((s) => s.sectorId === sector.id)
+      : undefined;
+    const weight = row ? toNumber(row.weightPct) : null;
+    if (!row || weight === null) continue;
+    weightPoints.push({ time: snap.snapshot_date, value: weight });
+    const target = toNumber(row.targetWeightPct);
+    if (target !== null) {
+      targetPoints.push({ time: snap.snapshot_date, value: target });
+    }
+    const benchmark = toNumber(row.benchmarkWeightPct);
+    if (benchmark !== null) {
+      benchmarkPoints.push({ time: snap.snapshot_date, value: benchmark });
+    }
+  }
+  // ValueChart draws one overlay line, so the target gets it and the benchmark
+  // weight reads as a number under the chart — unless no target was ever set,
+  // in which case the benchmark is the only reference worth drawing.
+  const referenceLine = targetPoints.length > 0 ? targetPoints : benchmarkPoints;
+  const referenceLabel = targetPoints.length > 0 ? "target" : "benchmark";
+  const latestBenchmarkWeight =
+    benchmarkPoints.length > 0
+      ? benchmarkPoints[benchmarkPoints.length - 1].value
+      : null;
+  const weightTrendUp =
+    weightPoints.length > 1 &&
+    weightPoints[weightPoints.length - 1].value >= weightPoints[0].value;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -138,6 +197,36 @@ export default async function SectorWorkspacePage({
             fund={ctx.fund.slug}
             assetClass={ctx.fund.asset_class}
           />
+        )}
+      </section>
+
+      {/* Weight vs target / benchmark over time */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold sm:text-lg">Weight over time</h2>
+        {weightPoints.length < 2 ? (
+          <EmptyState
+            title="No weight history yet"
+            hint="This chart plots the sector's weight against its target and benchmark weight. It fills in after the nightly snapshot runs — two nights of snapshots make the first line."
+          />
+        ) : (
+          <div className="glass-card overflow-hidden py-3">
+            <ValueChart
+              data={weightPoints}
+              benchmark={referenceLine.length > 0 ? referenceLine : undefined}
+              isPositive={weightTrendUp}
+              fund={ctx.fund.slug}
+              height={200}
+              showPriceScale
+            />
+            <p className="px-4 pt-2 text-xs text-muted sm:px-6">
+              Shaded area: the sector&apos;s weight in the fund, one point per
+              nightly snapshot.
+              {referenceLine.length > 0 && ` Grey line: ${referenceLabel} weight.`}
+              {referenceLabel === "target" && latestBenchmarkWeight !== null && (
+                <> Benchmark weight is {formatPercent(latestBenchmarkWeight)}.</>
+              )}
+            </p>
+          </div>
         )}
       </section>
 

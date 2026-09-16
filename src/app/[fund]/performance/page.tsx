@@ -1,9 +1,11 @@
 // Performance page (SPEC 11.2 / 14): newsletter-style period-return table
 // (MTD QTD YTD LTM 3Y SI, fund vs benchmark vs difference), cumulative
-// growth-of-$1 and drawdown charts, monthly return grid, risk metrics, and
-// sector weights vs benchmark. Arch adds the Treasury curve (latest date vs
-// ~one month prior) and weighted-duration history from snapshot detail.
+// growth-of-$1 and drawdown charts, monthly return grid, risk metrics, sector
+// attribution for the selected period (?attr=), and sector weights vs
+// benchmark. Arch adds the 2y/5y/10y/30y Treasury curve over time, allocation
+// by rating bucket, and weighted-duration history from snapshot detail.
 
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAuthState, getFundContext } from "@/lib/fund";
 import { valueFund } from "@/lib/valuation";
@@ -13,14 +15,20 @@ import {
   drawdownSeries,
   monthlyReturnTable,
   riskMetrics,
+  sectorAttribution,
   timeWeightedReturns,
+  type SectorAttribution,
 } from "@/lib/performance";
 import { PerformanceView } from "@/components/dashboard/PerformanceView";
-import { CurveChart } from "@/components/charts/CurveChart";
+import {
+  CurveChart,
+  type CurveHistorySeries,
+} from "@/components/charts/CurveChart";
 import { ValueChart } from "@/components/charts/ValueChart";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import {
+  formatCurrencyWhole,
   formatDate,
   formatNumber,
   formatPercent,
@@ -47,6 +55,41 @@ const PERIOD_LABELS: Record<string, string> = {
   "3Y": "3 years (ann.)",
   SI: "Since inception",
 };
+
+/** Windows offered for attribution; anything else in ?attr= falls back to YTD. */
+const ATTRIBUTION_PERIODS = ["MTD", "QTD", "YTD", "SI"];
+
+const UNCLASSIFIED = "Unclassified";
+
+/** 2y / 5y / 10y / 30y over time (SPEC 14), plotted over the past year. */
+const CURVE_TENORS = [
+  { months: 24, label: "2Y" },
+  { months: 60, label: "5Y" },
+  { months: 120, label: "10Y" },
+  { months: 360, label: "30Y" },
+];
+const CURVE_HISTORY_DAYS = 365;
+
+const RATING_BUCKETS = ["AAA", "AA", "A", "BBB", "BB and below", "NR"];
+
+/**
+ * holdings.rating is free text entered by the PM, in S&P form ("AA+", "BBB")
+ * or Moody's ("Aa1", "Baa2"), so bucket on the letter prefix with notches
+ * stripped. Order matters: BBB/Baa are tested before the generic B grades.
+ * Anything blank or unrecognized is NR.
+ */
+function ratingBucket(rating: string | null): string {
+  const r = (rating ?? "").trim().toUpperCase();
+  if (r === "") return "NR";
+  if (r.startsWith("AAA")) return "AAA";
+  if (r.startsWith("AA")) return "AA";
+  if (r.startsWith("A")) return "A";
+  if (r.startsWith("BBB") || r.startsWith("BAA")) return "BBB";
+  if (r.startsWith("B") || r.startsWith("C") || r.startsWith("D")) {
+    return "BB and below";
+  }
+  return "NR";
+}
 
 function pct(value: number | null): string {
   return value !== null ? formatSignedPercent(value) : "—";
@@ -153,12 +196,211 @@ function SectorWeightsTable({ v }: { v: FundValuation }) {
   );
 }
 
+function SectorAttributionCard({
+  fundSlug,
+  selected,
+  attribution,
+}: {
+  fundSlug: string;
+  selected: string;
+  attribution: SectorAttribution | null;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader
+        title="Sector attribution"
+        action={
+          <div className="flex gap-1">
+            {ATTRIBUTION_PERIODS.map((p) => (
+              <Link
+                key={p}
+                href={`/${fundSlug}/performance?attr=${p}`}
+                className={`rounded-lg px-2.5 py-1 text-xs transition-colors ${
+                  p === selected
+                    ? "bg-accent-soft font-medium text-accent"
+                    : "text-muted hover:bg-highlight hover:text-foreground"
+                }`}
+              >
+                {p}
+              </Link>
+            ))}
+          </div>
+        }
+      />
+      {attribution === null ? (
+        <p className="px-6 py-8 text-center text-sm text-muted">
+          No attribution for this period yet. It is built from the holding
+          prices in the nightly snapshots, so it fills in once two of them
+          bracket the period.
+        </p>
+      ) : (
+        <>
+          <p className="px-4 pt-3 text-xs text-muted sm:px-6">
+            Contribution = each holding&rsquo;s weight on{" "}
+            {formatDate(attribution.startDate)} × its return through{" "}
+            {formatDate(attribution.endDate)}. Covers{" "}
+            {formatPercent(attribution.coveredWeightPct)} of the portfolio —
+            cash and positions opened or closed inside the period are not
+            attributed.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-card-border text-left text-[11px] uppercase tracking-wider text-muted">
+                  <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
+                    Sector
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-medium">
+                    Start weight
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-medium">Return</th>
+                  <th className="px-3 py-2.5 pr-4 text-right font-medium sm:pr-6">
+                    Contribution
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {attribution.rows.map((r) => (
+                  <tr
+                    key={r.sectorName}
+                    className="border-b border-card-border/50"
+                  >
+                    <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
+                      {r.sectorName}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-muted">
+                      {formatPercent(r.startWeightPct)}
+                    </td>
+                    <td
+                      className={`px-3 py-2.5 text-right tabular-nums ${cellClass(
+                        r.returnPct
+                      )}`}
+                    >
+                      {formatSignedPercent(r.returnPct)}
+                    </td>
+                    <td
+                      className={`px-3 py-2.5 pr-4 text-right font-medium tabular-nums sm:pr-6 ${cellClass(
+                        r.contributionPct
+                      )}`}
+                    >
+                      {formatSignedPercent(r.contributionPct, 2)}
+                    </td>
+                  </tr>
+                ))}
+                <tr>
+                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-semibold backdrop-blur-xl sm:px-6">
+                    Total
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-muted">
+                    {formatPercent(attribution.coveredWeightPct)}
+                  </td>
+                  <td className="px-3 py-2.5" />
+                  <td
+                    className={`px-3 py-2.5 pr-4 text-right font-semibold tabular-nums sm:pr-6 ${cellClass(
+                      attribution.totalPct
+                    )}`}
+                  >
+                    {formatSignedPercent(attribution.totalPct, 2)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** Arch: market-value weighted allocation by rating bucket (SPEC 14). */
+function RatingBucketTable({ v }: { v: FundValuation }) {
+  const byBucket = new Map<string, { marketValue: number; count: number }>();
+  for (const h of v.holdings) {
+    const bucket = ratingBucket(h.holding.rating);
+    const agg = byBucket.get(bucket) ?? { marketValue: 0, count: 0 };
+    agg.marketValue += h.marketValue;
+    agg.count += 1;
+    byBucket.set(bucket, agg);
+  }
+  const rows = RATING_BUCKETS.flatMap((bucket) => {
+    const agg = byBucket.get(bucket);
+    return agg && agg.marketValue > 0
+      ? [
+          {
+            bucket,
+            marketValue: agg.marketValue,
+            count: agg.count,
+            weightPct:
+              v.totalValue > 0 ? (agg.marketValue / v.totalValue) * 100 : 0,
+          },
+        ]
+      : [];
+  });
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader
+        title="Allocation by rating"
+        action={<span className="text-xs text-muted">Live valuation</span>}
+      />
+      {rows.length === 0 ? (
+        <p className="px-6 py-8 text-center text-sm text-muted">
+          No rated positions yet. Ratings are set per holding under Fund Admin →
+          Holdings.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-card-border text-left text-[11px] uppercase tracking-wider text-muted">
+                <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
+                  Rating
+                </th>
+                <th className="px-3 py-2.5 text-right font-medium">Positions</th>
+                <th className="px-3 py-2.5 text-right font-medium">
+                  Market value
+                </th>
+                <th className="px-3 py-2.5 pr-4 text-right font-medium sm:pr-6">
+                  Weight
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr
+                  key={r.bucket}
+                  className="border-b border-card-border/50 last:border-0"
+                >
+                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
+                    {r.bucket}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-muted">
+                    {r.count}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {formatCurrencyWhole(r.marketValue)}
+                  </td>
+                  <td className="px-3 py-2.5 pr-4 text-right font-medium tabular-nums sm:pr-6">
+                    {formatPercent(r.weightPct)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default async function PerformancePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ fund: string }>;
+  searchParams: Promise<{ attr?: string }>;
 }) {
-  const { fund: slug } = await params;
+  const [{ fund: slug }, { attr }] = await Promise.all([params, searchParams]);
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
 
@@ -212,16 +454,27 @@ export default async function PerformancePage({
   const drawdown = drawdownSeries(growth);
   const monthly = monthlyReturnTable(snapshots, flows);
   const rm = riskMetrics(snapshots, flows);
-  const top5Weight = [...v.holdings]
-    .sort((a, b) => b.weightPct - a.weightPct)
-    .slice(0, 5)
-    .reduce((s, h) => s + h.weightPct, 0);
+  const byWeight = [...v.holdings].sort((a, b) => b.weightPct - a.weightPct);
+  const sumWeight = (n: number) =>
+    byWeight.slice(0, n).reduce((sum, h) => sum + h.weightPct, 0);
+  const top5Weight = sumWeight(5);
+  const top10Weight = sumWeight(10);
 
-  // Arch: latest Treasury curve vs the closest curve ~30 days earlier.
-  let curveSeries: {
-    label: string;
-    points: { tenorYears: number; yieldPct: number }[];
-  }[] = [];
+  // Sector attribution for the window in ?attr= (SPEC 11.2). valueFund()
+  // already resolved each holding's sector, so the map comes free.
+  const attrPeriod = attr && ATTRIBUTION_PERIODS.includes(attr) ? attr : "YTD";
+  const sectorByHoldingId = new Map(
+    v.holdings.map((h) => [h.holding.id, h.sectorName ?? UNCLASSIFIED])
+  );
+  const attribution = sectorAttribution(
+    snapshots,
+    sectorByHoldingId,
+    attrPeriod,
+    UNCLASSIFIED
+  );
+
+  // Arch: 2y / 5y / 10y / 30y par yields over the past year (SPEC 14).
+  let curveHistory: CurveHistorySeries[] = [];
   let durationHistory: ChartPoint[] = [];
   if (isFixedIncome) {
     const { data: latestRows } = await supabase
@@ -234,46 +487,27 @@ export default async function PerformancePage({
       null;
 
     if (latestDate) {
-      const { data: priorRows } = await supabase
-        .from("treasury_curve")
-        .select("curve_date")
-        .lte("curve_date", daysBefore(latestDate, 30))
-        .order("curve_date", { ascending: false })
-        .limit(1);
-      const priorDate =
-        ((priorRows as { curve_date: string }[] | null) ?? [])[0]?.curve_date ??
-        null;
-
-      const dates = priorDate ? [latestDate, priorDate] : [latestDate];
       const { data: curveRows } = await supabase
         .from("treasury_curve")
         .select("curve_date, tenor_months, yield_pct")
-        .in("curve_date", dates);
+        .in(
+          "tenor_months",
+          CURVE_TENORS.map((t) => t.months)
+        )
+        .gte("curve_date", daysBefore(latestDate, CURVE_HISTORY_DAYS))
+        .order("curve_date", { ascending: true });
       const rows = (curveRows as TreasuryCurvePoint[] | null) ?? [];
 
-      const toPoints = (date: string) =>
-        rows
-          .filter((r) => r.curve_date === date)
+      curveHistory = CURVE_TENORS.map((t) => ({
+        label: t.label,
+        points: rows
+          .filter((r) => Number(r.tenor_months) === t.months)
           .map((r) => ({
-            tenorYears: Number(r.tenor_months) / 12,
+            date: r.curve_date.slice(0, 10),
             yieldPct: Number(r.yield_pct),
           }))
-          .filter(
-            (p) => Number.isFinite(p.tenorYears) && Number.isFinite(p.yieldPct)
-          )
-          .sort((a, b) => a.tenorYears - b.tenorYears);
-
-      curveSeries = [
-        { label: `Latest (${formatDate(latestDate)})`, points: toPoints(latestDate) },
-        ...(priorDate
-          ? [
-              {
-                label: `1M ago (${formatDate(priorDate)})`,
-                points: toPoints(priorDate),
-              },
-            ]
-          : []),
-      ].filter((s) => s.points.length > 0);
+          .filter((pt) => Number.isFinite(pt.yieldPct)),
+      })).filter((series) => series.points.length > 0);
     }
 
     durationHistory = snapshots.flatMap((s) => {
@@ -435,9 +669,15 @@ export default async function PerformancePage({
         <StatCard
           label="Top 5 weight"
           value={formatPercent(top5Weight)}
-          sub="Concentration, live"
+          sub={`Top 10: ${formatPercent(top10Weight)}`}
         />
       </div>
+
+      <SectorAttributionCard
+        fundSlug={fund.slug}
+        selected={attrPeriod}
+        attribution={attribution}
+      />
 
       {isFixedIncome && (
         <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
@@ -445,11 +685,13 @@ export default async function PerformancePage({
             <CardHeader
               title="Treasury curve"
               action={
-                <span className="text-xs text-muted">Latest vs 1M ago</span>
+                <span className="text-xs text-muted">
+                  Par yields, past 12 months
+                </span>
               }
             />
             <div className="p-4 sm:p-6">
-              <CurveChart series={curveSeries} fund={fund.slug} />
+              <CurveChart history={curveHistory} fund={fund.slug} />
             </div>
           </Card>
           {durationHistory.length >= 2 && (
@@ -480,6 +722,8 @@ export default async function PerformancePage({
           )}
         </div>
       )}
+
+      {isFixedIncome && <RatingBucketTable v={v} />}
 
       <SectorWeightsTable v={v} />
     </div>

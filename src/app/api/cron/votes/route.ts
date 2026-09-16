@@ -1,13 +1,15 @@
-// Daily cron (06:00 UTC, vercel.json): close pitches whose vote window has
-// expired via the close_pitch_vote RPC and email the result to the fund
-// (plus "Ticket ready" to the PM and faculty advisor on a pass), then send
-// reminder emails for votes closing within 24h to eligible members who have
-// not voted (spec Sections 12, 13.6, 16). Bearer CRON_SECRET only.
+// Daily cron (06:00 UTC, vercel.json): open voting on scheduled pitches in
+// funds that run on `settings.auto_open_votes`, close pitches whose vote
+// window has expired via the close_pitch_vote RPC and email the result to the
+// fund (plus "Ticket ready" to the PM and faculty advisor on a pass), then
+// send reminder emails for votes closing within 24h to eligible members who
+// have not voted (spec Sections 12, 13.6, 16). Bearer CRON_SECRET only.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendEmail, sendToFund } from "@/lib/emails/send";
-import { formatDateTime, formatPercent } from "@/lib/format";
+import { easternDateString, formatDateTime, formatPercent } from "@/lib/format";
+import { openPitchVote } from "@/app/api/[fund]/pitches/[id]/open-vote/route";
 import type { AcademicYear, Fund, Pitch } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +23,9 @@ interface CloseResult {
   votes_no: number;
   eligible_voters?: number | null;
   already_closed?: boolean;
+  /** The rule this vote was judged under, frozen on the pitch at close. */
+  threshold_pct?: number | null;
+  quorum_pct?: number | null;
 }
 
 interface EligibleVoterRow {
@@ -35,6 +40,13 @@ interface ClosedEntry {
   pitch: string;
   title: string;
   status: string;
+  error?: string;
+}
+
+interface OpenedEntry {
+  pitch: string;
+  title: string;
+  closesAt: string | null;
   error?: string;
 }
 
@@ -54,6 +66,7 @@ export async function GET(request: NextRequest) {
   const service = createServiceClient();
   const now = new Date();
   const in24h = new Date(now.getTime() + 24 * 3_600_000);
+  const opened: OpenedEntry[] = [];
   const closed: ClosedEntry[] = [];
   const reminded: RemindedEntry[] = [];
 
@@ -78,6 +91,56 @@ export async function GET(request: NextRequest) {
       .eq("is_current", true)
       .maybeSingle();
     const currentYear = (yearRow as AcademicYear | null) ?? null;
+
+    // ── Auto-open scheduled votes ──────────────────────────────────────────
+    // SPEC Section 12: voting opens on the officer's button "or automatic at
+    // class end time if settings.auto_open_votes". scheduled_for is a date, so
+    // the class is over once that date is behind us in Eastern time — this run
+    // is just after midnight ET, and picks up what was presented yesterday.
+    // Side effects come from openPitchVote(), shared with the officer route.
+    const autoFunds = [...fundById.values()].filter(
+      (f) => f.settings?.auto_open_votes === true
+    );
+    if (autoFunds.length > 0 && currentYear) {
+      const { data: dueRows, error: dueError } = await service
+        .from("pitches")
+        .select("*")
+        .eq("status", "scheduled")
+        .in(
+          "fund_id",
+          autoFunds.map((f) => f.id)
+        )
+        .not("scheduled_for", "is", null)
+        .lt("scheduled_for", easternDateString(now));
+      if (dueError) throw new Error(dueError.message);
+
+      for (const pitch of (dueRows as Pitch[]) ?? []) {
+        const fund = fundById.get(pitch.fund_id);
+        if (!fund) continue;
+        try {
+          const result = await openPitchVote(service, {
+            fund,
+            yearId: currentYear.id,
+            pitch,
+            actorId: null,
+          });
+          opened.push({
+            pitch: pitch.id,
+            title: pitch.title,
+            closesAt: result.closesAt.toISOString(),
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`cron votes: auto-open failed for pitch ${pitch.id}:`, err);
+          opened.push({
+            pitch: pitch.id,
+            title: pitch.title,
+            closesAt: null,
+            error: message,
+          });
+        }
+      }
+    }
 
     // ── Close expired votes ────────────────────────────────────────────────
     const expired = pitches.filter(
@@ -111,7 +174,11 @@ export async function GET(request: NextRequest) {
               ? pitch.action === "rebalance"
                 ? "The rebalance passed. An officer will apply the new sector targets from the admin page."
                 : "A trade ticket is ready for the portfolio manager to execute."
-              : `It needed ${formatPercent(Number(fund.vote_pass_threshold_pct))} yes to pass.`,
+              : // The threshold the RPC actually applied and froze on the
+                // pitch, so the email never quotes a later settings change.
+                `It needed ${formatPercent(
+                  Number(result.threshold_pct ?? fund.vote_pass_threshold_pct)
+                )} yes to pass.`,
           ],
           ctaLabel: "View the pitch",
           ctaPath: `/${fund.slug}/pitches/${pitch.id}`,
@@ -228,7 +295,11 @@ export async function GET(request: NextRequest) {
     }
 
     const summary = {
-      ok: closed.every((c) => !c.error) && reminded.every((r) => !r.error),
+      ok:
+        opened.every((o) => !o.error) &&
+        closed.every((c) => !c.error) &&
+        reminded.every((r) => !r.error),
+      opened,
       closed,
       reminded,
     };
@@ -247,7 +318,7 @@ export async function GET(request: NextRequest) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("cron votes failed:", err);
     return NextResponse.json(
-      { ok: false, error: message, closed, reminded },
+      { ok: false, error: message, opened, closed, reminded },
       { status: 500 }
     );
   }

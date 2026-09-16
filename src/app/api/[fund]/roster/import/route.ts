@@ -16,6 +16,14 @@ import type { Fund, Sector } from "@/types/domain";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+// Resend sends `properties.action_link` verbatim, so redirect_to has to be set
+// here: omitted, Supabase's verify endpoint falls back to the project Site URL
+// and the invited member never reaches the set-password screen (SPEC 7, 11.1).
+function inviteRedirectTo(): string | undefined {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, "");
+  return base ? `${base}/auth/set-password` : undefined;
+}
+
 const bodySchema = z.object({
   csv: z.string().min(1).max(1_000_000),
   commit: z.boolean().default(false),
@@ -214,9 +222,11 @@ export async function POST(
         userId = createdUser.user.id;
         profilesByEmail.set(r.email, userId);
 
+        const redirectTo = inviteRedirectTo();
         const { data: linkData } = await service.auth.admin.generateLink({
           type: "invite",
           email: r.email,
+          options: redirectTo ? { redirectTo } : undefined,
         });
         const actionLink = linkData?.properties?.action_link;
         if (actionLink) {

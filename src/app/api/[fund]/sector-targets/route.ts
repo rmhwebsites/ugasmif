@@ -5,7 +5,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getFundContext } from "@/lib/fund";
-import { can } from "@/lib/permissions";
+import { can, leadsStrategyTeam } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import type { Sector } from "@/types/domain";
@@ -59,17 +59,11 @@ export async function POST(
     ((sectorRows as Sector[]) ?? []).map((s) => [s.id, s])
   );
 
-  // Permission: officer, or a strategy-team leader (checked via their own
-  // sector — a Macro leader may set the whole fund's targets).
-  const strategySector = [...sectors.values()].find(
-    (s) =>
-      s.is_strategy_team &&
-      ctx.membership?.sector_id === s.id &&
-      ctx.membership.is_sector_leader
-  );
+  // Permission: an officer, or the leader of this fund's strategy team, who
+  // sets the targets for every sector — same rule as the RLS helper
+  // leads_strategy_team(fund).
   const allowed = can(ctx, "set_sector_targets", {
-    sectorId: strategySector?.id,
-    isStrategySector: strategySector !== undefined,
+    isStrategyLeader: leadsStrategyTeam(ctx),
   });
   if (!allowed) {
     return NextResponse.json(

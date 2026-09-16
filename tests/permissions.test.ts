@@ -17,6 +17,7 @@ import {
   isActiveVoter,
   isOfficer,
   leadsSector,
+  leadsStrategyTeam,
   roleLabel,
   type PermissionAction,
 } from "@/lib/permissions";
@@ -477,38 +478,54 @@ describe("matrix: set sector targets and benchmark weights", () => {
     ]);
   });
 
-  it("also allows the Equity Strategies / Macro leader for their own sector", () => {
+  it("also allows the Equity Strategies / Macro leader, for every sector", () => {
+    // The strategy team sets the whole fund's targets. Target rows name
+    // ordinary sectors, never the strategy team itself, so the test is about
+    // who the caller is and not which sector the row is for.
+    expect(leadsStrategyTeam(strategyLeader)).toBe(true);
+    expect(can(strategyLeader, "set_sector_targets")).toBe(true);
     expect(
-      can(strategyLeader, "set_sector_targets", {
-        sectorId: STRATEGY,
-        isStrategySector: true,
-      })
+      can(strategyLeader, "set_sector_targets", { sectorId: TECH })
     ).toBe(true);
-    // same person, a different sector
     expect(
-      can(strategyLeader, "set_sector_targets", {
-        sectorId: TECH,
-        isStrategySector: true,
-      })
-    ).toBe(false);
-    // an ordinary sector leader, even for their own sector
-    expect(
-      can(sectorLeader, "set_sector_targets", {
-        sectorId: TECH,
-        isStrategySector: false,
-      })
-    ).toBe(false);
-    // the strategy leader with no strategy flag supplied
-    expect(can(strategyLeader, "set_sector_targets", { sectorId: STRATEGY })).toBe(
+      can(strategyLeader, "set_sector_targets", { sectorId: HEALTHCARE })
+    ).toBe(true);
+
+    // An ordinary sector leader, even for their own sector.
+    expect(leadsStrategyTeam(sectorLeader)).toBe(false);
+    expect(can(sectorLeader, "set_sector_targets", { sectorId: TECH })).toBe(
       false
     );
-    // an analyst on the strategy team is not its leader
+
+    // An analyst on the strategy team is not its leader.
+    const strategyAnalyst = ctx({ role: "analyst", sectorId: STRATEGY });
+    expect(leadsStrategyTeam(strategyAnalyst)).toBe(false);
+    expect(can(strategyAnalyst, "set_sector_targets")).toBe(false);
+
+    // A leader whose membership has lapsed.
+    const formerLeader = ctx({
+      role: "sector_leader",
+      isSectorLeader: true,
+      sectorId: STRATEGY,
+      status: "alumni",
+    });
+    expect(leadsStrategyTeam(formerLeader)).toBe(false);
+    expect(can(formerLeader, "set_sector_targets")).toBe(false);
+  });
+
+  it("takes a pre-resolved isStrategyLeader over the context", () => {
+    // Callers that already answered the question (the API route, which
+    // mirrors the SQL helper) pass it in; the flag wins either way.
     expect(
-      can(ctx({ role: "analyst", sectorId: STRATEGY }), "set_sector_targets", {
-        sectorId: STRATEGY,
-        isStrategySector: true,
-      })
+      can(sectorLeader, "set_sector_targets", { isStrategyLeader: true })
+    ).toBe(true);
+    expect(
+      can(strategyLeader, "set_sector_targets", { isStrategyLeader: false })
     ).toBe(false);
+    // An officer does not need it.
+    expect(
+      can(president, "set_sector_targets", { isStrategyLeader: false })
+    ).toBe(true);
   });
 });
 

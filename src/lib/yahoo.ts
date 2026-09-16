@@ -2,14 +2,19 @@
 //
 // Layer 1: module-memory cache per serverless instance — 5 min TTL while the
 // market is open, 60 min otherwise.
-// Layer 2: the price_snapshots table. Quotes are persisted fire-and-forget
-// when the caller passes a service client (the cron does); on a Yahoo outage
-// the latest snapshot row is returned with stale: true. getQuotes never
-// throws — symbols with nothing available are simply absent from the Map.
+// Layer 2: the price_snapshots table. Every fetched quote is persisted there
+// fire-and-forget; on a Yahoo outage the latest snapshot row is returned with
+// stale: true. getQuotes never throws — symbols with nothing available are
+// simply absent from the Map.
+//
+// price_snapshots is service-role only for INSERT and session-gated for
+// SELECT, so both directions use the service client; callers that already hold
+// one (cron) can pass it instead.
 //
 // Server-only by convention (do not import from client components), but kept
-// free of next-only imports at module scope so scripts can import it —
-// createSupabaseServerClient is loaded dynamically on the fallback path only.
+// free of next-only imports at module scope so scripts can import it — the
+// Supabase clients are loaded dynamically, inside try/catch, so a script or a
+// missing service key degrades to "no snapshots" rather than throwing.
 //
 // NOTE: this is the one file where `any` is permitted (yahoo-finance2's
 // response types are looser than its typings admit); every `any` is cast to a
@@ -118,8 +123,29 @@ function toQuote(raw: RawYahooQuote): Quote | null {
   };
 }
 
+/**
+ * Service-role client for price_snapshots, resolved once per instance. The
+ * import is dynamic (and the failure cached) because @/lib/supabase/service is
+ * server-only: outside a Next server runtime — scripts, tests — this answers
+ * null and the snapshot layer simply does nothing.
+ */
+let snapshotClientPromise: Promise<SupabaseClient | null> | null = null;
+
+function snapshotClient(): Promise<SupabaseClient | null> {
+  snapshotClientPromise ??= (async () => {
+    try {
+      const { createServiceClient } = await import("@/lib/supabase/service");
+      return createServiceClient();
+    } catch (err) {
+      console.error("price_snapshots: no service-role client available:", err);
+      return null;
+    }
+  })();
+  return snapshotClientPromise;
+}
+
 /** Fire-and-forget insert into price_snapshots (policy: service role only). */
-function persistSnapshots(client: SupabaseClient, quotes: Quote[]): void {
+function persistSnapshots(quotes: Quote[], client?: SupabaseClient): void {
   if (quotes.length === 0) return;
   const rows = quotes.map((q) => ({
     symbol: q.symbol,
@@ -131,7 +157,9 @@ function persistSnapshots(client: SupabaseClient, quotes: Quote[]): void {
   }));
   void (async () => {
     try {
-      const { error } = await client.from("price_snapshots").insert(rows);
+      const db = client ?? (await snapshotClient());
+      if (!db) return;
+      const { error } = await db.from("price_snapshots").insert(rows);
       if (error) console.error("price_snapshots insert failed:", error.message);
     } catch (err) {
       console.error("price_snapshots insert failed:", err);
@@ -145,14 +173,19 @@ function minutesSince(iso: string): number {
 
 /**
  * Layer-2 fallback: latest price_snapshots row per symbol, marked stale.
- * Dynamic import keeps this module importable outside a Next request scope.
+ * Prefers the service-role client: the SELECT policy requires an authenticated
+ * user, and the cron has no cookie, so the anon client would read nothing.
+ * Dynamic imports keep this module importable outside a Next request scope.
  */
 async function snapshotFallback(symbols: string[]): Promise<Map<string, Quote>> {
   const out = new Map<string, Quote>();
   if (symbols.length === 0) return out;
   try {
-    const { createSupabaseServerClient } = await import("@/lib/supabase/server");
-    const supabase = await createSupabaseServerClient();
+    let supabase = await snapshotClient();
+    if (!supabase) {
+      const { createSupabaseServerClient } = await import("@/lib/supabase/server");
+      supabase = await createSupabaseServerClient();
+    }
     await Promise.all(
       symbols.map(async (symbol) => {
         const { data } = await supabase
@@ -193,9 +226,10 @@ async function snapshotFallback(symbols: string[]): Promise<Map<string, Quote>> 
 
 /**
  * Batch quotes: one yf.quote() call for every symbol not freshly cached.
- * Pass `opts.persist` (a service-role client — cron only) to write the
- * fetched quotes to price_snapshots fire-and-forget. Never throws; symbols
- * with nothing available (no Yahoo, no cache, no snapshot) are absent.
+ * Fetched quotes are written to price_snapshots fire-and-forget (SPEC 13.1);
+ * `opts.persist` supplies the client when the caller already holds a
+ * service-role one. Never throws; symbols with nothing available (no Yahoo, no
+ * cache, no snapshot) are absent.
  */
 export async function getQuotes(
   symbols: string[],
@@ -241,7 +275,7 @@ export async function getQuotes(
     console.error("yahoo quote batch failed:", err);
   }
 
-  if (opts?.persist) persistSnapshots(opts.persist, fetched);
+  persistSnapshots(fetched, opts?.persist);
 
   // Anything still missing: expired memory cache first, then price_snapshots.
   const missing = toFetch.filter((s) => !out.has(s));

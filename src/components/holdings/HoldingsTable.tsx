@@ -4,7 +4,8 @@
 // first column on horizontal scroll (GBH HoldingsTable pattern), sector +
 // instrument-type filters, CSV export. Column set switches on the fund's
 // asset class — equity columns for Athena, bond columns for Arch. Row click
-// opens /[fund]/holdings/[id].
+// opens /[fund]/holdings/[id]. `compact` renders the same table without the
+// filter bar or card chrome for the dashboard's top-positions slice.
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -62,6 +63,16 @@ interface Column {
 
 function gainPct(v: HoldingValuation): number | null {
   return v.costBasis > 0 ? (v.unrealizedGain / v.costBasis) * 100 : null;
+}
+
+/** Since-added return for a position: (price − avg cost) / avg cost. Null
+ *  without a live price or a cost (transfers in can sit at avg_cost 0), which
+ *  is why it is not read off unrealizedGain — that falls back to cost basis
+ *  when a price is missing and would read as a flat 0%. */
+function sinceAddedPct(v: HoldingValuation): number | null {
+  const avgCost = Number(v.holding.avg_cost);
+  if (v.price === null || !Number.isFinite(avgCost) || avgCost <= 0) return null;
+  return ((v.price - avgCost) / avgCost) * 100;
 }
 
 /** Stacked $ / % cell colored by sign (GBH day-change pattern). */
@@ -225,6 +236,33 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
         defaultDir: "desc",
         sortValue: (v) => gainPct(v),
         render: (v) => <SignedPair amount={v.unrealizedGain} pct={gainPct(v)} />,
+      },
+      {
+        key: "sinceAdded",
+        label: "Since Added",
+        defaultDir: "desc",
+        className: "hidden lg:table-cell",
+        sortValue: (v) => sinceAddedPct(v),
+        render: (v) => {
+          const pct = sinceAddedPct(v);
+          if (pct === null) return <span className="text-muted">—</span>;
+          return (
+            <div className="flex flex-col items-end">
+              <span
+                className={`text-[11px] font-medium sm:text-sm ${
+                  pct >= 0 ? "text-gain" : "text-loss"
+                }`}
+              >
+                {formatSignedPercent(pct)}
+              </span>
+              {v.holding.opened_on && (
+                <span className="text-[10px] text-muted sm:text-xs">
+                  since {formatDate(v.holding.opened_on)}
+                </span>
+              )}
+            </div>
+          );
+        },
       },
     ];
   }
@@ -395,10 +433,15 @@ export function HoldingsTable({
   holdings,
   fund,
   assetClass,
+  compact = false,
 }: {
   holdings: HoldingValuation[];
   fund: FundSlug;
   assetClass: AssetClass;
+  /** Dashboard slice: drops the filter bar, the CSV export and the card
+   *  chrome, because the caller supplies the card and the "all holdings"
+   *  link. Sorting still works. */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({
@@ -493,51 +536,53 @@ export function HoldingsTable({
     "cursor-pointer rounded-lg border border-input-border bg-input-bg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-highlight focus:outline-none";
 
   return (
-    <div className="glass-card overflow-hidden">
+    <div className={compact ? "overflow-hidden" : "glass-card overflow-hidden"}>
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-card-border px-4 py-3 sm:px-6">
-        <select
-          aria-label="Filter by sector"
-          value={sectorFilter}
-          onChange={(e) => setSectorFilter(e.target.value)}
-          className={selectClass}
-        >
-          <option value="all">All sectors</option>
-          {sectorOptions.names.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-          {sectorOptions.hasUnassigned && (
-            <option value={UNASSIGNED}>Unassigned</option>
+      {!compact && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-card-border px-4 py-3 sm:px-6">
+          <select
+            aria-label="Filter by sector"
+            value={sectorFilter}
+            onChange={(e) => setSectorFilter(e.target.value)}
+            className={selectClass}
+          >
+            <option value="all">All sectors</option>
+            {sectorOptions.names.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+            {sectorOptions.hasUnassigned && (
+              <option value={UNASSIGNED}>Unassigned</option>
+            )}
+          </select>
+          <select
+            aria-label="Filter by instrument type"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className={selectClass}
+          >
+            <option value="all">All types</option>
+            {typeOptions.map((t) => (
+              <option key={t} value={t}>
+                {TYPE_LABELS[t] ?? t}
+              </option>
+            ))}
+          </select>
+          {filtering && (
+            <span className="text-xs text-muted">
+              {filtered.length} of {holdings.length}
+            </span>
           )}
-        </select>
-        <select
-          aria-label="Filter by instrument type"
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className={selectClass}
-        >
-          <option value="all">All types</option>
-          {typeOptions.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABELS[t] ?? t}
-            </option>
-          ))}
-        </select>
-        {filtering && (
-          <span className="text-xs text-muted">
-            {filtered.length} of {holdings.length}
-          </span>
-        )}
-        <a
-          href={`/api/${fund}/holdings/export`}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-input-border bg-input-bg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-highlight"
-        >
-          <Download className="h-3.5 w-3.5" aria-hidden="true" />
-          Export CSV
-        </a>
-      </div>
+          <a
+            href={`/api/${fund}/holdings/export`}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-input-border bg-input-bg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-highlight"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            Export CSV
+          </a>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="p-8 text-center">
@@ -556,10 +601,10 @@ export function HoldingsTable({
           </Button>
         </div>
       ) : (
-        <div className="max-h-[70vh] overflow-auto">
+        <div className={compact ? "overflow-auto" : "max-h-[70vh] overflow-auto"}>
           <table
             className="w-full"
-            style={{ minWidth: assetClass === "equity" ? 820 : 1000 }}
+            style={{ minWidth: assetClass === "equity" ? 900 : 1000 }}
           >
             <thead>
               <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted sm:text-xs">

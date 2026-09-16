@@ -213,6 +213,25 @@ export interface FundSnapshot {
   created_at: string;
 }
 
+/** One sector's line in a snapshot's `detail` jsonb, as written by
+ *  /api/cron/eod-snapshot. Rows written by older versions of the cron may be
+ *  missing it, so every reader checks before using it. */
+export interface SnapshotSectorDetail {
+  sectorId: string;
+  sectorName: string;
+  marketValue: number;
+  weightPct: number;
+  targetWeightPct: number | null;
+  benchmarkWeightPct: number | null;
+}
+
+/** The subset of `fund_snapshots.detail` the app reads back. */
+export interface FundSnapshotDetail {
+  sectors?: SnapshotSectorDetail[];
+  weightedDuration?: number | null;
+  weightedYtm?: number | null;
+}
+
 export interface SectorTarget {
   id: string;
   fund_id: string;
@@ -250,6 +269,10 @@ export interface Pitch {
   votes_no: number;
   eligible_voters: number | null;
   result_pct: number | null;
+  /** Threshold and quorum in force when the vote closed — frozen by
+   *  close_pitch_vote so history never moves with fund settings. */
+  threshold_pct: number | null;
+  quorum_pct: number | null;
   closed_by: string | null;
   closed_at: string | null;
   settings?: { paired_pitch_id?: string } | null;

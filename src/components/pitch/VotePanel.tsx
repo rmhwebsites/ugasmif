@@ -2,14 +2,14 @@
 
 // Cast / change a vote while the window is open (SPEC Section 12). What the
 // viewer may see is decided server-side and passed down: members get their
-// own ballot state; officers/advisor (canViewIndividual) also get the live
-// split and the voter roll via TallyCard. After close everyone sees the
-// yes/no counts, the percentage, and the pass/fail badge — names stay
-// officer-only.
+// own ballot state plus how many ballots are in, never the split;
+// officers/advisor (canViewIndividual) also get the live split and the voter
+// roll via TallyCard. After close everyone sees the yes/no counts, the
+// percentage, and the pass/fail badge — names stay officer-only.
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Lock, Vote, XCircle } from "lucide-react";
+import { CheckCircle2, Lock, Users, Vote, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { TallyCard, type TallyVoter } from "@/components/pitch/TallyCard";
 import { formatDateTime } from "@/lib/format";
@@ -30,6 +30,7 @@ export function VotePanel({
   voteBlockedReason,
   canViewIndividual,
   myVote,
+  ballotsCast = null,
   liveYes = null,
   liveNo = null,
   voters = null,
@@ -43,12 +44,18 @@ export function VotePanel({
   votesNo: number;
   resultPct: number | null;
   eligibleVoters: number | null;
+  /**
+   * The rule the vote was judged under — frozen on the pitch at close, the
+   * fund's current setting while the vote is still open.
+   */
   thresholdPct: number;
   quorumPct: number | null;
   canVote: boolean;
   voteBlockedReason?: string | null;
   canViewIndividual: boolean;
   myVote: { choice: VoteChoice; comment: string | null } | null;
+  /** Total ballots cast so far — the count members may see, never the split. */
+  ballotsCast?: number | null;
   /** Live counts — only passed when the viewer holds view_individual_votes. */
   liveYes?: number | null;
   liveNo?: number | null;
@@ -200,11 +207,22 @@ export function VotePanel({
               />
             </div>
           ) : (
-            <p className="flex items-center gap-1.5 border-t border-card-border pt-3 text-xs text-muted">
-              <Lock className="h-3 w-3" />
-              Ballots stay sealed until the vote closes — results appear here
-              for everyone once it does.
-            </p>
+            <div className="space-y-1 border-t border-card-border pt-3">
+              {ballotsCast !== null && (
+                <p className="flex items-center gap-1.5 text-sm">
+                  <Users className="h-3.5 w-3.5 shrink-0 text-muted" />
+                  <span className="font-medium tabular-nums">{ballotsCast}</span>
+                  {eligibleVoters !== null
+                    ? ` of ${eligibleVoters} ballots in`
+                    : " ballots in"}
+                </p>
+              )}
+              <p className="flex items-center gap-1.5 text-xs text-muted">
+                <Lock className="h-3 w-3 shrink-0" />
+                The yes/no split stays sealed until the vote closes — results
+                appear here for everyone once it does.
+              </p>
+            </div>
           )}
         </div>
       )}

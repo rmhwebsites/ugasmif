@@ -1,11 +1,12 @@
 // /[fund]/admin/sectors — manage sectors and set target/benchmark weights
-// (SPEC 11.3). Officers manage sectors; the strategy-team leader may also
-// set targets.
+// (SPEC 11.3). Officers manage the sectors themselves; the strategy-team
+// leader (Equity Strategies / Macro) reaches this page for the targets form
+// and nothing else.
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
-import { can, isOfficer } from "@/lib/permissions";
+import { can, isOfficer, leadsStrategyTeam } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   SectorsAdmin,
@@ -24,6 +25,13 @@ export default async function SectorsAdminPage({
   const { fund: slug } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
+
+  const canSetTargets = can(ctx, "set_sector_targets", {
+    isStrategyLeader: leadsStrategyTeam(ctx),
+  });
+  // The sector list itself is officer business; the advisor reads it.
+  const showSectorList = isOfficer(ctx) || ctx.isFacultyAdvisor;
+  if (!showSectorList && !canSetTargets) notFound();
 
   const supabase = await createSupabaseServerClient();
   const [sectorsRes, targetsRes] = await Promise.all([
@@ -46,31 +54,22 @@ export default async function SectorsAdminPage({
     if (!latestTargets[t.sector_id]) latestTargets[t.sector_id] = t;
   }
 
-  const strategySector = sectors.find(
-    (s) =>
-      s.is_strategy_team &&
-      ctx.membership?.sector_id === s.id &&
-      ctx.membership.is_sector_leader
-  );
-  const canSetTargets = can(ctx, "set_sector_targets", {
-    sectorId: strategySector?.id,
-    isStrategySector: strategySector !== undefined,
-  });
-
   return (
     <div className="space-y-4 sm:space-y-6">
       <h1 className="text-2xl font-bold sm:text-3xl">Sectors Admin</h1>
 
-      <Card>
-        <CardHeader title="Sectors" />
-        <div className="p-4 sm:p-6">
-          <SectorsAdmin
-            fund={ctx.fund.slug}
-            sectors={sectors}
-            canEditSectors={isOfficer(ctx)}
-          />
-        </div>
-      </Card>
+      {showSectorList && (
+        <Card>
+          <CardHeader title="Sectors" />
+          <div className="p-4 sm:p-6">
+            <SectorsAdmin
+              fund={ctx.fund.slug}
+              sectors={sectors}
+              canEditSectors={isOfficer(ctx)}
+            />
+          </div>
+        </Card>
+      )}
 
       {canSetTargets && (
         <Card>

@@ -5,12 +5,19 @@
 // Pricing decision tree (CONTRACTS.md):
 //   - money_market with no symbol         → 1.00, source "par" (cash sweep)
 //   - pricing_method "live" (has symbol)  → getQuotes() batch, source "live"
-//   - pricing_method "treasury_curve"     → priceTreasury() off the latest
-//                                           treasury_curve date, source "curve"
-//   - pricing_method "manual"             → latest bond_marks row through
-//                                           estimateBondPrice(), source "mark"
-//                                           (marked today / no curve) or
-//                                           "estimate" (curve-drifted)
+//   - pricing_method "treasury_curve"     → the latest treasury_curve date,
+//                                           source "curve" — unless a manual
+//                                           mark is newer than that curve date,
+//                                           which the PM may enter for any
+//                                           Treasury (SPEC 13.2), source "mark"
+//   - pricing_method "manual"             → latest bond_marks row, aged forward
+//                                           by the curve move since it was
+//                                           taken, source "mark" (marked today
+//                                           / no curve) or "estimate"
+//
+// Bond prices come from @/lib/bonds/providers, selected by pricing_method
+// (SPEC 13.4), so a paid feed is one new provider class and one enum value
+// rather than another branch here.
 //
 // Market value: equity-types = quantity × price; bond-types =
 // (clean + accrued per 100) / 100 × face  (accrued from @/lib/bonds/accrued;
@@ -47,8 +54,7 @@ import type {
 } from "@/types/domain";
 import { getQuotes } from "@/lib/yahoo";
 import { accruedInterest } from "@/lib/bonds/accrued";
-import { priceTreasury } from "@/lib/bonds/treasury";
-import { estimateBondPrice } from "@/lib/bonds/estimate";
+import { providerFor, type BondPrice } from "@/lib/bonds/providers";
 import { easternDateString } from "@/lib/format";
 
 const MS_PER_DAY = 86_400_000;
@@ -110,7 +116,26 @@ interface PricedHolding {
   duration: number | null;
 }
 
-function priceOne(
+/** Age of a mark in days, for the stale flag. */
+function markAgeDays(mark: BondMark, asOf: Date): number {
+  return (asOf.getTime() - new Date(mark.marked_at).getTime()) / MS_PER_DAY;
+}
+
+/**
+ * True when a manual mark is more recent than the curve we would otherwise
+ * price a Treasury off — the condition under which the PM's override wins
+ * (SPEC 13.2). No curve at all means the mark is the only price available.
+ */
+function markOutranksCurve(
+  mark: BondMark,
+  curve: TreasuryCurvePoint[] | null
+): boolean {
+  const curveDate = curve?.[0]?.curve_date;
+  if (!curveDate) return true;
+  return easternDateString(new Date(mark.marked_at)) > curveDate.slice(0, 10);
+}
+
+async function priceOne(
   h: Holding,
   ctx: {
     asOf: Date;
@@ -120,7 +145,7 @@ function priceOne(
     curveAtMark: Map<string, TreasuryCurvePoint[] | null>;
     staleMarkDays: number;
   }
-): PricedHolding {
+): Promise<PricedHolding> {
   const qty = Number(h.quantity);
   const costBasis = costBasisOf(h);
   const holdingYtm = h.ytm !== null ? Number(h.ytm) : null;
@@ -185,64 +210,87 @@ function priceOne(
     };
   }
 
+  // Bond methods below. dayChange is 0 for all of them — marks and curve
+  // prices have no previous close, documented at the top of the file.
+  const accrued = accruedInterest(h, ctx.asOf);
+  const mark = ctx.marks.get(h.id);
+  const bondBase: PricedHolding = {
+    ...base,
+    accruedInterest: accrued,
+    marketValue: costBasis + accrued,
+    dayChange: 0,
+    dayChangePct: 0,
+  };
+  const request = { cusip: h.cusip ?? undefined, isin: h.isin ?? undefined, asOf: ctx.asOf };
+
   if (h.pricing_method === "treasury_curve") {
-    const accrued = accruedInterest(h, ctx.asOf);
-    const priced = ctx.curveNow ? priceTreasury(h, ctx.curveNow, ctx.asOf) : null;
+    // SPEC 13.2: the PM can override any Treasury with a manual mark. The
+    // override holds only while it is newer than the curve date on offer —
+    // once the cron loads a later curve, the curve is the better price.
+    if (mark && markOutranksCurve(mark, ctx.curveNow)) {
+      const override: BondPrice | null =
+        (await providerFor("manual", { marks: [mark], holdings: [h] })?.getPrice(
+          request
+        )) ?? null;
+      if (override) {
+        return {
+          ...bondBase,
+          price: override.cleanPrice,
+          priceSource: "mark",
+          markedAt: mark.marked_at,
+          stale: markAgeDays(mark, ctx.asOf) > ctx.staleMarkDays,
+          marketValue: (override.cleanPrice / 100) * qty + accrued,
+          ytm: override.ytm ?? holdingYtm,
+          duration: override.duration ?? holdingDuration,
+        };
+      }
+    }
+
+    const priced: BondPrice | null =
+      (await providerFor("treasury_curve", {
+        curve: ctx.curveNow,
+        holdings: [h],
+      })?.getPrice(request)) ?? null;
     if (!priced) {
       // No curve yet (or matured): cost + accrued, flagged for the checklist.
-      return {
-        ...base,
-        priceSource: "curve",
-        stale: true,
-        accruedInterest: accrued,
-        marketValue: costBasis + accrued,
-        dayChange: 0,
-        dayChangePct: 0,
-      };
+      return { ...bondBase, priceSource: "curve", stale: true };
     }
+    const curveAccrued = priced.accrued ?? accrued;
     return {
-      ...base,
+      ...bondBase,
       price: priced.cleanPrice,
       priceSource: "curve",
-      accruedInterest: priced.accrued,
-      marketValue: (priced.cleanPrice / 100) * qty + priced.accrued,
-      dayChange: 0, // curve prices have no previous close — documented above
-      dayChangePct: 0,
-      ytm: priced.ytm,
-      duration: priced.duration,
+      accruedInterest: curveAccrued,
+      marketValue: (priced.cleanPrice / 100) * qty + curveAccrued,
+      ytm: priced.ytm ?? holdingYtm,
+      duration: priced.duration ?? holdingDuration,
     };
   }
 
   // pricing_method === "manual"
-  const accrued = accruedInterest(h, ctx.asOf);
-  const mark = ctx.marks.get(h.id);
   if (!mark) {
     // Never marked: cost + accrued, stale so the PM checklist surfaces it.
-    return {
-      ...base,
-      priceSource: "mark",
-      stale: true,
-      accruedInterest: accrued,
-      marketValue: costBasis + accrued,
-      dayChange: 0,
-      dayChangePct: 0,
-    };
+    return { ...bondBase, priceSource: "mark", stale: true };
   }
-  const markDate = easternDateString(new Date(mark.marked_at));
-  const est = estimateBondPrice(h, mark, ctx.curveAtMark.get(markDate) ?? null, ctx.curveNow);
-  const ageDays = (ctx.asOf.getTime() - new Date(mark.marked_at).getTime()) / MS_PER_DAY;
+  const priced: BondPrice | null =
+    (await providerFor("manual", {
+      marks: [mark],
+      holdings: [h],
+      drift: { curveNow: ctx.curveNow, curveAtMark: ctx.curveAtMark },
+    })?.getPrice(request)) ?? null;
+  if (!priced) {
+    // The mark postdates asOf (clock skew, or a historical valuation).
+    return { ...bondBase, priceSource: "mark", stale: true };
+  }
   return {
-    ...base,
-    price: est.cleanPrice,
-    priceSource: est.source,
-    markedAt: est.markedAt,
-    stale: ageDays > ctx.staleMarkDays,
-    accruedInterest: accrued,
-    marketValue: (est.cleanPrice / 100) * qty + accrued,
-    dayChange: 0, // yesterday's estimate is not stored — documented above
-    dayChangePct: 0,
-    ytm: est.ytm ?? holdingYtm,
-    duration: est.duration ?? holdingDuration,
+    ...bondBase,
+    price: priced.cleanPrice,
+    priceSource: priced.source === "estimate" ? "estimate" : "mark",
+    markedAt: mark.marked_at,
+    stale: markAgeDays(mark, ctx.asOf) > ctx.staleMarkDays,
+    marketValue: (priced.cleanPrice / 100) * qty + accrued,
+    ytm: priced.ytm ?? holdingYtm,
+    duration: priced.duration ?? holdingDuration,
   };
 }
 
@@ -302,17 +350,23 @@ export async function valueFund(
   const quotesPromise: Promise<Map<string, Quote>> =
     liveSymbols.length > 0 ? getQuotes(liveSymbols) : Promise.resolve(new Map());
 
-  // Latest mark per manual holding.
+  // Latest mark per holding that can carry one: manual bonds price off marks,
+  // and a Treasury mark overrides the curve (SPEC 13.2).
   const manualIds = holdings
     .filter((h) => h.pricing_method === "manual")
     .map((h) => h.id);
+  const markableIds = holdings
+    .filter(
+      (h) => h.pricing_method === "manual" || h.pricing_method === "treasury_curve"
+    )
+    .map((h) => h.id);
   const marksPromise: Promise<Map<string, BondMark>> = (async () => {
     const latest = new Map<string, BondMark>();
-    if (manualIds.length === 0) return latest;
+    if (markableIds.length === 0) return latest;
     const { data } = await supabase
       .from("bond_marks")
       .select("*")
-      .in("holding_id", manualIds)
+      .in("holding_id", markableIds)
       .order("marked_at", { ascending: false });
     for (const m of (data as BondMark[] | null) ?? []) {
       if (!latest.has(m.holding_id)) latest.set(m.holding_id, m);
@@ -333,9 +387,12 @@ export async function valueFund(
   ]);
 
   // Curve rows as of each distinct mark date, for estimateBondPrice drift.
+  // Only manual bonds drift; a Treasury override is used at its marked price.
+  const manualIdSet = new Set(manualIds);
   const curveAtMark = new Map<string, TreasuryCurvePoint[] | null>();
   const markDates = new Set<string>();
   for (const mark of marks.values()) {
+    if (!manualIdSet.has(mark.holding_id)) continue;
     const d = easternDateString(new Date(mark.marked_at));
     if (d !== today) markDates.add(d); // today's marks never drift
   }
@@ -346,8 +403,10 @@ export async function valueFund(
   );
 
   const staleMarkDays = Number(fund.settings?.stale_mark_days ?? DEFAULT_STALE_MARK_DAYS);
-  const priced = holdings.map((h) =>
-    priceOne(h, { asOf, quotes, marks, curveNow, curveAtMark, staleMarkDays })
+  const priced = await Promise.all(
+    holdings.map((h) =>
+      priceOne(h, { asOf, quotes, marks, curveNow, curveAtMark, staleMarkDays })
+    )
   );
 
   const securitiesValue = priced.reduce((s, p) => s + p.marketValue, 0);
