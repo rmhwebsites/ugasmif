@@ -18,7 +18,7 @@ import {
 } from "lightweight-charts";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { GAIN_COLOR, LOSS_COLOR, getChartTheme } from "@/lib/chartTheme";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { SmifSpinner } from "@/components/ui/SmifSpinner";
 import { formatCurrency, formatSignedPercent } from "@/lib/format";
 import type { FundSlug } from "@/types/domain";
 
@@ -262,7 +262,9 @@ export function StockChart({
       </div>
 
       {loading ? (
-        <Skeleton className="h-[260px] w-full sm:h-[360px]" />
+        <div className="flex h-[260px] items-center justify-center sm:h-[360px]">
+          <SmifSpinner size="md" label="Loading price history" />
+        </div>
       ) : error ? (
         <div className="flex h-[260px] items-center justify-center sm:h-[360px]">
           <p className="max-w-xs text-center text-xs text-muted">{error}</p>

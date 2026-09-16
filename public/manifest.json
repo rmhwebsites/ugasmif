@@ -1,7 +1,10 @@
 {
+  "id": "/",
   "name": "SMIF Hub",
   "short_name": "SMIF Hub",
   "description": "UGA Student Managed Investment Fund — Athena Stock Fund and Arch Bond Fund",
+  "lang": "en-US",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -13,7 +16,8 @@
     {
       "src": "/favicon-32.png",
       "sizes": "32x32",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icon-192.png",
@@ -26,6 +30,20 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Athena Stock Fund",
+      "short_name": "Athena",
+      "url": "/athena",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Arch Bond Fund",
+      "short_name": "Arch",
+      "url": "/arch",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

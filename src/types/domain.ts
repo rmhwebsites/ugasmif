@@ -96,6 +96,12 @@ export interface Profile {
   id: string;
   email: string;
   full_name: string;
+  /** Split name collected at onboarding; full_name stays the display name. */
+  first_name: string | null;
+  last_name: string | null;
+  phone: string | null;
+  /** Set when first-run onboarding completes; null sends them to /onboarding. */
+  onboarded_at: string | null;
   is_app_admin: boolean;
   is_faculty_advisor: boolean;
   must_change_password: boolean;

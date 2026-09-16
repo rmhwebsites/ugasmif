@@ -147,6 +147,19 @@ body,
   transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
+/* The SMIF mark turning, used as the loading indicator. The bull and bear
+   already circle each other, so rotation is the motion the logo implies. */
+.smif-spin {
+  animation: smif-spin 1.6s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes smif-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Skeleton shimmer for loading states */
 .skeleton {
   background: var(--highlight);
@@ -172,5 +185,26 @@ body,
 @keyframes skeleton-shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* Motion is decorative here; the status text carries the meaning. */
+@media (prefers-reduced-motion: reduce) {
+  .smif-spin {
+    animation: smif-pulse 2s ease-in-out infinite;
+  }
+
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+@keyframes smif-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
   }
 }

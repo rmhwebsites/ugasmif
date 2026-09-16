@@ -62,20 +62,49 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Temporary-password gate: check the flag and force the change screen.
-  if (
-    user &&
-    !pathname.startsWith("/auth/change-password") &&
-    !isPublic
-  ) {
-    const { data: profile } = await supabase
+  // Two first-run gates, in order of urgency: an officer-set temporary
+  // password must be replaced before anything else, then onboarding collects
+  // the details the roster import could not know.
+  if (user && !isPublic) {
+    const onChangePassword = pathname.startsWith("/auth/change-password");
+    const onOnboarding = pathname.startsWith("/onboarding");
+
+    const gateQuery = await supabase
       .from("profiles")
-      .select("must_change_password")
+      .select("must_change_password, onboarded_at")
       .eq("id", user.id)
       .maybeSingle();
-    if (profile?.must_change_password) {
+    let profile = gateQuery.data;
+    const error = gateQuery.error;
+
+    // Before migration 0003 there is no onboarded_at column. Fall back rather
+    // than let a pending migration quietly disable the password gate too.
+    if (error) {
+      const fallback = await supabase
+        .from("profiles")
+        .select("must_change_password")
+        .eq("id", user.id)
+        .maybeSingle();
+      profile = fallback.data
+        ? { ...fallback.data, onboarded_at: new Date().toISOString() }
+        : null;
+    }
+
+    if (profile?.must_change_password && !onChangePassword) {
       const url = request.nextUrl.clone();
       url.pathname = "/auth/change-password";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+
+    if (
+      profile &&
+      !profile.must_change_password &&
+      !profile.onboarded_at &&
+      !onOnboarding
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/onboarding";
       url.search = "";
       return NextResponse.redirect(url);
     }

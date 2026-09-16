@@ -1,5 +1,14 @@
 // SMIF bull/bear mark as an inline component so it inherits sizing from
 // className. Colors are fixed brand colors (bear gray, UGA red bull).
+//
+// The two crescents are the same shape rotated 180°, but the path is written
+// out twice rather than shared through <defs>/<use>: a fixed id would collide
+// whenever two marks render together (sidebar plus a spinner), and if the
+// instance holding the <defs> unmounted, every other instance referencing it
+// would lose its crescent.
+
+const CRESCENT =
+  "M 118 78 C 56 122 26 212 34 300 C 42 372 92 420 160 430 C 214 438 262 418 288 386 C 300 371 304 356 298 348 C 270 310 220 296 176 272 C 128 246 96 200 96 158 C 96 128 104 100 118 78 Z";
 
 export function SmifLogo({ className }: { className?: string }) {
   return (
@@ -9,20 +18,16 @@ export function SmifLogo({ className }: { className?: string }) {
       aria-label="SMIF"
       role="img"
     >
-      <defs>
-        <path
-          id="smif-crescent"
-          d="M 118 78 C 56 122 26 212 34 300 C 42 372 92 420 160 430 C 214 438 262 418 288 386 C 300 371 304 356 298 348 C 270 310 220 296 176 272 C 128 246 96 200 96 158 C 96 128 104 100 118 78 Z"
-        />
-      </defs>
-      <use href="#smif-crescent" fill="#808285" />
+      {/* Bear */}
+      <path fill="#808285" d={CRESCENT} />
       <path
         fill="#808285"
         d="M 208 332 C 206 302 218 282 236 276 C 238 264 252 260 258 270 C 262 266 268 266 272 270 C 292 272 316 284 330 298 C 336 304 338 310 334 312 C 324 314 314 318 310 324 C 316 330 318 336 312 340 C 300 350 282 352 268 350 C 244 350 218 344 208 332 Z"
       />
-      <use
-        href="#smif-crescent"
+      {/* Bull */}
+      <path
         fill="#ba0c2f"
+        d={CRESCENT}
         transform="rotate(180 256 256)"
       />
       <path

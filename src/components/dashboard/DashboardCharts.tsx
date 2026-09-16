@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { ValueChart } from "@/components/charts/ValueChart";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { SmifSpinner } from "@/components/ui/SmifSpinner";
 import {
   formatCurrency,
   formatSignedCurrency,
@@ -198,8 +198,8 @@ export function DashboardCharts({
             </p>
           </div>
         ) : points === null ? (
-          <div className="px-3 pb-3">
-            <Skeleton className="h-[150px] sm:h-[190px]" />
+          <div className="flex h-[150px] items-center justify-center px-3 pb-3 sm:h-[190px]">
+            <SmifSpinner size="md" label="Loading performance history" />
           </div>
         ) : points.length === 0 ? (
           <div className="flex h-[160px] items-center justify-center px-6 text-center sm:h-[200px]">
