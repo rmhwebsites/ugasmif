@@ -591,7 +591,7 @@ export function HoldingsTable({
                       <button
                         type="button"
                         onClick={() => toggleSort(col)}
-                        className={`inline-flex cursor-pointer items-center gap-1 uppercase tracking-wider transition-colors hover:text-foreground ${
+                        className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap uppercase tracking-wider transition-colors hover:text-foreground ${
                           active ? "text-foreground" : ""
                         }`}
                       >

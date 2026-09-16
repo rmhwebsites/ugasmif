@@ -70,14 +70,14 @@ export default async function AuditPage({
   const entities = [...new Set(entries.map((e) => e.entity))].sort();
 
   const inputClass =
-    "rounded-lg border border-input-border bg-input-bg px-3 py-1.5 text-sm outline-none focus:border-accent";
+    "w-full min-w-0 rounded-lg border border-input-border bg-input-bg px-3 py-1.5 text-sm outline-none focus:border-accent";
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <h1 className="text-2xl font-bold sm:text-3xl">Audit Log</h1>
 
       <form className="glass-card flex flex-wrap items-end gap-2 p-4">
-        <label className="text-xs text-muted">
+        <label className="min-w-[8rem] flex-1 text-xs text-muted">
           <span className="mb-1 block">Action contains</span>
           <input
             name="action"
@@ -86,7 +86,7 @@ export default async function AuditPage({
             placeholder="trade.execute"
           />
         </label>
-        <label className="text-xs text-muted">
+        <label className="min-w-[8rem] flex-1 text-xs text-muted">
           <span className="mb-1 block">Entity</span>
           <select
             name="entity"
@@ -101,7 +101,7 @@ export default async function AuditPage({
             ))}
           </select>
         </label>
-        <label className="text-xs text-muted">
+        <label className="min-w-[8rem] flex-1 text-xs text-muted">
           <span className="mb-1 block">Actor</span>
           <select
             name="actor"
@@ -116,7 +116,7 @@ export default async function AuditPage({
             ))}
           </select>
         </label>
-        <label className="text-xs text-muted">
+        <label className="min-w-[8rem] flex-1 text-xs text-muted">
           <span className="mb-1 block">From</span>
           <input
             type="date"
@@ -125,7 +125,7 @@ export default async function AuditPage({
             className={inputClass}
           />
         </label>
-        <label className="text-xs text-muted">
+        <label className="min-w-[8rem] flex-1 text-xs text-muted">
           <span className="mb-1 block">To</span>
           <input
             type="date"

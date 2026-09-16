@@ -321,7 +321,7 @@ export default async function DashboardPage({
 
       {isFixedIncome && <RatesStrip />}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Card>
           <CardHeader
             title="Today's movers"
@@ -342,7 +342,7 @@ export default async function DashboardPage({
                   : "No live price moves yet. Check back during market hours, or add holdings under Fund Admin → Holdings."}
               </p>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
                 <div>
                   <p className="px-2 pb-1 text-[11px] uppercase tracking-wider text-muted">
                     Top gainers
@@ -417,7 +417,7 @@ export default async function DashboardPage({
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Card className="p-4 sm:p-5">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-accent" />

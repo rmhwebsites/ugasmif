@@ -62,7 +62,7 @@ export default async function SectorsPage({
     <div className="space-y-4 sm:space-y-6">
       <h1 className="text-2xl font-bold sm:text-3xl">Sectors</h1>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
         {sectors.map((sector) => {
           const w = weightBySector.get(sector.id);
           const leaders = members.filter(
@@ -81,12 +81,14 @@ export default async function SectorsPage({
             <Link
               key={sector.id}
               href={`/${ctx.fund.slug}/sectors/${sector.slug}`}
-              className="glass-card block p-4 transition-colors hover:bg-highlight sm:p-5"
+              className="glass-card block min-w-0 p-4 transition-colors hover:bg-highlight sm:p-5"
             >
               <div className="flex items-start justify-between gap-2">
-                <h2 className="font-semibold">{sector.name}</h2>
+                <h2 className="min-w-0 font-semibold">{sector.name}</h2>
                 {sector.is_strategy_team && (
-                  <Badge tone="info">strategy team</Badge>
+                  <Badge className="shrink-0" tone="info">
+                    strategy team
+                  </Badge>
                 )}
               </div>
 
@@ -134,7 +136,10 @@ export default async function SectorsPage({
                   {(w?.holdingsCount ?? 0) === 1 ? "holding" : "holdings"}
                 </span>
                 {over !== null && Math.abs(over) >= 0.05 && (
-                  <Badge tone={over > 0 ? "gain" : "loss"}>
+                  <Badge
+                    className="shrink-0 whitespace-nowrap"
+                    tone={over > 0 ? "gain" : "loss"}
+                  >
                     {over > 0 ? "+" : ""}
                     {over.toFixed(1)}pp vs target
                   </Badge>
@@ -142,9 +147,13 @@ export default async function SectorsPage({
               </div>
 
               {lastPitch && (
-                <div className="mt-2 flex items-center gap-2 border-t border-card-border pt-2 text-xs text-muted">
-                  <span className="truncate">Last pitch: {lastPitch.title}</span>
-                  <PitchStatusBadge status={lastPitch.status} />
+                <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-card-border pt-2 text-xs text-muted">
+                  <span className="min-w-0 flex-1 truncate">
+                    Last pitch: {lastPitch.title}
+                  </span>
+                  <span className="shrink-0">
+                    <PitchStatusBadge status={lastPitch.status} />
+                  </span>
                 </div>
               )}
             </Link>

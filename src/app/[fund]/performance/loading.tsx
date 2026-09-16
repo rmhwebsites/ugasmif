@@ -10,7 +10,7 @@ export default function PerformanceLoading() {
         <Skeleton className="mt-2 h-4 w-64" />
       </div>
       <Skeleton className="h-72" />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Skeleton className="h-80" />
         <Skeleton className="h-80" />
       </div>

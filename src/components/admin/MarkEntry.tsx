@@ -123,13 +123,21 @@ export function CsvTool({
   hint,
   placeholder,
   endpoint,
-  resultLabel,
+  successVerb,
+  countKey,
+  noun,
 }: {
   title: string;
   hint: string;
   placeholder: string;
   endpoint: string;
-  resultLabel: (r: { errors?: { row: number; message: string }[] } & Record<string, unknown>) => string;
+  /** e.g. "Inserted" — kept as plain strings because a server component
+   *  renders this and React cannot serialize a function prop. */
+  successVerb: string;
+  /** field on the JSON response holding the row count, e.g. "inserted" */
+  countKey: string;
+  /** e.g. "marks" */
+  noun: string;
 }) {
   const router = useRouter();
   const [csv, setCsv] = useState("");
@@ -153,7 +161,8 @@ export function CsvTool({
       setResult(data?.error ?? "Upload failed.");
       return;
     }
-    setResult(resultLabel(data));
+    const count = Number(data?.[countKey] ?? 0);
+    setResult(`${successVerb} ${count} ${count === 1 ? noun.replace(/s$/, "") : noun}.`);
     setErrors(data.errors ?? []);
     setCsv("");
     router.refresh();

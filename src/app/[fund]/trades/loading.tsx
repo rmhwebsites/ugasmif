@@ -10,7 +10,7 @@ export default function TradesLoading() {
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-4 w-24" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Skeleton className="h-40" />
         <Skeleton className="hidden h-40 lg:block" />
       </div>

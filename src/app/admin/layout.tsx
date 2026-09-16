@@ -19,11 +19,13 @@ export default async function AppAdminLayout({
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-card-border bg-sticky px-4 py-2.5 backdrop-blur-xl sm:px-6">
-        <Link href="/" className="flex items-center gap-2">
-          <SmifLogo className="h-8 w-8" />
-          <span className="font-semibold">SMIF Hub · App Admin</span>
+        <Link href="/" className="flex min-w-0 items-center gap-2">
+          <SmifLogo className="h-8 w-8 shrink-0" />
+          <span className="truncate font-semibold">
+            SMIF Hub <span className="hidden sm:inline">· App Admin</span>
+          </span>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <ThemeToggle />
           <LogoutButton />
         </div>

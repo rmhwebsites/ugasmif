@@ -65,7 +65,7 @@ export function PerformanceView({
   const maxDrawdown = drawdown.reduce((m, p) => Math.min(m, p.value), 0);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
       <Card className="overflow-hidden">
         <CardHeader
           title="Growth of $1"

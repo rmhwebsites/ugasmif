@@ -147,7 +147,7 @@ export function HoldingForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
       <div>
         <label className={labelClass}>Instrument type</label>
         <select

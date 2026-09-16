@@ -75,7 +75,7 @@ export function SettingsForm({ fund }: { fund: Fund }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
       <div>
         <label className={labelClass}>Vote pass threshold (% of votes cast)</label>
         <input

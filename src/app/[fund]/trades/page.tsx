@@ -178,7 +178,7 @@ export default async function TradesPage({
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
             Pending tickets ({tickets.length})
           </h2>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             {tickets.map((ticket) => (
               <TicketCard
                 key={ticket.id}

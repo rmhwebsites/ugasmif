@@ -111,7 +111,9 @@ export default async function HoldingsAdminPage({
               hint="Columns: cusip,clean_price,ytm,duration,source,marked_at — matched to holdings by CUSIP."
               placeholder={"cusip,clean_price,ytm,duration,source,marked_at\n26442CBD5,98.750,5.125,7.2,bloomberg,2026-09-12"}
               endpoint={`/api/${ctx.fund.slug}/marks/csv`}
-              resultLabel={(r) => `Inserted ${r.inserted} marks.`}
+              successVerb="Inserted"
+              countKey="inserted"
+              noun="marks"
             />
           </div>
         </Card>
@@ -135,7 +137,9 @@ export default async function HoldingsAdminPage({
             hint="Columns: date,total_value,cash — extends the performance chart with monthly values from old newsletters."
             placeholder={"date,total_value,cash\n2024-09-30,4321000,45000"}
             endpoint={`/api/${ctx.fund.slug}/snapshots/import`}
-            resultLabel={(r) => `Imported ${r.imported} snapshots.`}
+            successVerb="Imported"
+            countKey="imported"
+            noun="snapshots"
           />
         </div>
       </Card>

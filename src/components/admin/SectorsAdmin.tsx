@@ -73,17 +73,25 @@ export function SectorsAdmin({
         {sectors.map((s, i) => (
           <li
             key={s.id}
-            className={`flex items-center justify-between gap-2 rounded-lg bg-highlight px-3 py-2 text-sm ${
+            className={`flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 rounded-lg bg-highlight px-3 py-2 text-sm ${
               s.is_active ? "" : "opacity-45"
             }`}
           >
-            <div className="flex items-center gap-2">
-              <span className="font-medium">{s.name}</span>
-              {s.is_strategy_team && <Badge tone="info">strategy team</Badge>}
-              {!s.is_active && <Badge tone="neutral">inactive</Badge>}
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-medium">{s.name}</span>
+              {s.is_strategy_team && (
+                <Badge className="shrink-0" tone="info">
+                  strategy team
+                </Badge>
+              )}
+              {!s.is_active && (
+                <Badge className="shrink-0" tone="neutral">
+                  inactive
+                </Badge>
+              )}
             </div>
             {canEditSectors && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => move(i, -1)}
@@ -105,14 +113,14 @@ export function SectorsAdmin({
                   onClick={() =>
                     patch(s.id, { is_strategy_team: !s.is_strategy_team })
                   }
-                  className="cursor-pointer text-xs text-accent hover:underline"
+                  className="cursor-pointer whitespace-nowrap text-xs text-accent hover:underline"
                 >
                   {s.is_strategy_team ? "unset strategy" : "set strategy"}
                 </button>
                 <button
                   type="button"
                   onClick={() => patch(s.id, { is_active: !s.is_active })}
-                  className="cursor-pointer text-xs text-muted hover:underline"
+                  className="cursor-pointer whitespace-nowrap text-xs text-muted hover:underline"
                 >
                   {s.is_active ? "deactivate" : "activate"}
                 </button>
@@ -123,11 +131,11 @@ export function SectorsAdmin({
       </ul>
 
       {canEditSectors && (
-        <form onSubmit={addSector} className="flex gap-2">
+        <form onSubmit={addSector} className="flex min-w-0 gap-2">
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className={inputClass}
+            className={`${inputClass} min-w-0 flex-1`}
             placeholder="New sector name"
           />
           <Button type="submit" disabled={newName.trim() === ""}>
@@ -204,7 +212,7 @@ export function SectorTargetsForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="grid grid-cols-[1fr_100px_100px] items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted">
+      <div className="grid grid-cols-[minmax(0,1fr)_68px_68px] sm:grid-cols-[minmax(0,1fr)_100px_100px] items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted">
         <span>Sector</span>
         <span className="text-right">Target %</span>
         <span className="text-right">Benchmark %</span>
@@ -212,7 +220,7 @@ export function SectorTargetsForm({
       {rows.map((r, i) => (
         <div
           key={r.sector_id}
-          className="grid grid-cols-[1fr_100px_100px] items-center gap-2"
+          className="grid grid-cols-[minmax(0,1fr)_68px_68px] sm:grid-cols-[minmax(0,1fr)_100px_100px] items-center gap-2"
         >
           <span className="text-sm">{r.name}</span>
           <input

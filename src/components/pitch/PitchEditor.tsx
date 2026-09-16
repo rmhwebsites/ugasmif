@@ -706,7 +706,7 @@ export function PitchEditor({
           </p>
         ) : (
           <div className="mt-3 space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-foreground">
                 <FileText className="h-4 w-4 shrink-0 text-accent" />
                 {uploading === "deck" ? "Uploading deck…" : "Upload deck (PDF or PPTX, ≤25MB)"}
