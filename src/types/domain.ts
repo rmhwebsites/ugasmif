@@ -516,4 +516,11 @@ export interface FundContext {
   role: MembershipRole | null;
   isAppAdmin: boolean;
   isFacultyAdvisor: boolean;
+  /**
+   * False only for an alumnus of a fund that has turned
+   * settings.alumni_can_view_current off. The RLS helper
+   * alumni_view_horizon() is what actually hides the rows; this mirrors it so
+   * pages can explain the gap instead of rendering as empty.
+   */
+  canViewCurrent: boolean;
 }

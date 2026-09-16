@@ -27,6 +27,7 @@ import {
 import { ValueChart } from "@/components/charts/ValueChart";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { AlumniNotice } from "@/components/ui/AlumniNotice";
 import {
   formatCurrencyWhole,
   formatDate,
@@ -403,6 +404,15 @@ export default async function PerformancePage({
   const [{ fund: slug }, { attr }] = await Promise.all([params, searchParams]);
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
+
+  if (!ctx.canViewCurrent) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-bold sm:text-2xl">Performance</h1>
+        <AlumniNotice fundName={ctx.fund.name} />
+      </div>
+    );
+  }
 
   const { supabase } = await getAuthState();
   const fund = ctx.fund;

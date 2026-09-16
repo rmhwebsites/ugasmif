@@ -170,6 +170,7 @@ function ctx(options: CtxOptions = {}): FundContext {
     role: null,
     isAppAdmin,
     isFacultyAdvisor,
+    canViewCurrent: true,
   };
   return { ...base, role: effectiveRole(base) };
 }

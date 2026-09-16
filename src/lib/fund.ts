@@ -113,6 +113,18 @@ export const getFundContext = cache(
       sector = (sectorRow as Sector) ?? null;
     }
 
+    // Mirrors the SQL helper alumni_view_horizon(): a past-year or alumni
+    // membership loses the live book when the fund turns the setting off.
+    const isCurrentMember =
+      membership !== null &&
+      membership.status === "active" &&
+      membership.academic_year_id === currentYear.id;
+    const canViewCurrent =
+      profile.is_app_admin ||
+      profile.is_faculty_advisor ||
+      isCurrentMember ||
+      fund.settings.alumni_can_view_current !== false;
+
     const ctx: FundContext = {
       fund,
       profile,
@@ -122,6 +134,7 @@ export const getFundContext = cache(
       role: null,
       isAppAdmin: profile.is_app_admin,
       isFacultyAdvisor: profile.is_faculty_advisor,
+      canViewCurrent,
     };
     ctx.role = effectiveRole(ctx);
     return ctx;

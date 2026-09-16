@@ -24,6 +24,7 @@ import { HoldingsTable } from "@/components/holdings/HoldingsTable";
 import { SectorBarChart } from "@/components/charts/SectorBarChart";
 import { AllocationDonut } from "@/components/charts/AllocationDonut";
 import { RatesStrip } from "@/components/charts/RatesStrip";
+import { AlumniNotice } from "@/components/ui/AlumniNotice";
 import {
   easternDateString,
   formatCurrency,
@@ -238,10 +239,12 @@ export default async function DashboardPage({
         <div>
           <h1 className="text-xl font-bold sm:text-2xl">{fund.name}</h1>
           <p className="text-xs text-muted sm:text-sm">
-            As of {formatDateTime(v.asOf)} ET · Benchmark: {fund.benchmark_name}
+            {ctx.canViewCurrent
+              ? `As of ${formatDateTime(v.asOf)} ET · Benchmark: ${fund.benchmark_name}`
+              : `Benchmark: ${fund.benchmark_name}`}
           </p>
         </div>
-        {v.anyStale && (
+        {ctx.canViewCurrent && v.anyStale && (
           <Badge
             tone="warn"
             title="Some prices are delayed or estimated — a live source was unavailable, so the latest saved values are shown."
@@ -251,206 +254,214 @@ export default async function DashboardPage({
         )}
       </div>
 
-      <div
-        className={`grid grid-cols-2 gap-3 sm:gap-4 ${
-          isFixedIncome ? "sm:grid-cols-3" : "sm:grid-cols-4"
-        }`}
-      >
-        <StatCard
-          label="Total value"
-          value={formatCurrency(v.totalValue)}
-          sub={`${v.holdings.length} holdings`}
-        />
-        <StatCard
-          label="Day change"
-          value={
-            <span className={v.dayChange >= 0 ? "text-gain" : "text-loss"}>
-              {formatSignedCurrency(v.dayChange)}
-            </span>
-          }
-          sub={`${formatSignedPercent(v.dayChangePct)} today`}
-          subClassName={v.dayChange >= 0 ? "text-gain" : "text-loss"}
-        />
-        <StatCard
-          label="Cash"
-          value={formatCurrency(v.cash)}
-          sub={`${formatPercent(cashWeight)} of fund`}
-        />
-        <StatCard
-          label="YTD vs benchmark"
-          value={
-            ytd.diff !== null ? (
-              <span className={ytd.diff >= 0 ? "text-gain" : "text-loss"}>
-                {formatSignedPercent(ytd.diff)}
-              </span>
-            ) : (
-              "—"
-            )
-          }
-          sub={
-            ytd.fund !== null
-              ? `Fund ${formatSignedPercent(ytd.fund)} · ${
-                  fund.benchmark_name
-                } ${formatSignedPercent(ytd.benchmark)}`
-              : "Awaiting nightly snapshots"
-          }
-        />
-        {isFixedIncome && (
-          <>
+      {/* The live book. An alumnus of a fund that keeps current data to
+          active members gets the notice in its place (SPEC 11.3). */}
+      {ctx.canViewCurrent ? (
+        <>
+          <div
+            className={`grid grid-cols-2 gap-3 sm:gap-4 ${
+              isFixedIncome ? "sm:grid-cols-3" : "sm:grid-cols-4"
+            }`}
+          >
             <StatCard
-              label="Weighted duration"
-              value={
-                v.weightedDuration !== null
-                  ? `${formatNumber(v.weightedDuration, 1)} yrs`
-                  : "—"
-              }
-              sub="Market-value weighted, bonds only"
+              label="Total value"
+              value={formatCurrency(v.totalValue)}
+              sub={`${v.holdings.length} holdings`}
             />
             <StatCard
-              label="Weighted YTM"
+              label="Day change"
               value={
-                v.weightedYtm !== null
-                  ? formatPercent(v.weightedYtm, 2)
-                  : "—"
+                <span className={v.dayChange >= 0 ? "text-gain" : "text-loss"}>
+                  {formatSignedCurrency(v.dayChange)}
+                </span>
               }
-              sub="Market-value weighted, bonds only"
+              sub={`${formatSignedPercent(v.dayChangePct)} today`}
+              subClassName={v.dayChange >= 0 ? "text-gain" : "text-loss"}
             />
-          </>
-        )}
-      </div>
-
-      <DashboardCharts
-        fund={fund.slug}
-        totalValue={v.totalValue}
-        dayChange={v.dayChange}
-        dayChangePct={v.dayChangePct}
-        benchmarkName={fund.benchmark_name}
-      />
-
-      {isFixedIncome && <RatesStrip />}
-
-      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
-        <Card>
-          <CardHeader
-            title="Today's movers"
-            action={
-              <Link
-                href={`/${slug}/holdings`}
-                className="text-xs font-medium text-accent hover:underline"
-              >
-                All holdings
-              </Link>
-            }
-          />
-          <div className="p-3 sm:p-4">
-            {gainers.length === 0 && losers.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted">
-                {isFixedIncome
-                  ? "Bond prices move with marks and the nightly snapshot — open Holdings for current prices and sources."
-                  : "No live price moves yet. Check back during market hours, or add holdings under Fund Admin → Holdings."}
-              </p>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
-                <div>
-                  <p className="px-2 pb-1 text-[11px] uppercase tracking-wider text-muted">
-                    Top gainers
-                  </p>
-                  {gainers.length > 0 ? (
-                    gainers.map((h) => (
-                      <MoverRow key={h.holding.id} fund={slug} h={h} />
-                    ))
-                  ) : (
-                    <p className="px-2 py-2 text-xs text-muted">
-                      Nothing up today
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <p className="px-2 pb-1 text-[11px] uppercase tracking-wider text-muted">
-                    Top losers
-                  </p>
-                  {losers.length > 0 ? (
-                    losers.map((h) => (
-                      <MoverRow key={h.holding.id} fund={slug} h={h} />
-                    ))
-                  ) : (
-                    <p className="px-2 py-2 text-xs text-muted">
-                      Nothing down today
-                    </p>
-                  )}
-                </div>
-              </div>
+            <StatCard
+              label="Cash"
+              value={formatCurrency(v.cash)}
+              sub={`${formatPercent(cashWeight)} of fund`}
+            />
+            <StatCard
+              label="YTD vs benchmark"
+              value={
+                ytd.diff !== null ? (
+                  <span className={ytd.diff >= 0 ? "text-gain" : "text-loss"}>
+                    {formatSignedPercent(ytd.diff)}
+                  </span>
+                ) : (
+                  "—"
+                )
+              }
+              sub={
+                ytd.fund !== null
+                  ? `Fund ${formatSignedPercent(ytd.fund)} · ${
+                      fund.benchmark_name
+                    } ${formatSignedPercent(ytd.benchmark)}`
+                  : "Awaiting nightly snapshots"
+              }
+            />
+            {isFixedIncome && (
+              <>
+                <StatCard
+                  label="Weighted duration"
+                  value={
+                    v.weightedDuration !== null
+                      ? `${formatNumber(v.weightedDuration, 1)} yrs`
+                      : "—"
+                  }
+                  sub="Market-value weighted, bonds only"
+                />
+                <StatCard
+                  label="Weighted YTM"
+                  value={
+                    v.weightedYtm !== null
+                      ? formatPercent(v.weightedYtm, 2)
+                      : "—"
+                  }
+                  sub="Market-value weighted, bonds only"
+                />
+              </>
             )}
           </div>
-        </Card>
 
-        <Card>
-          <CardHeader
-            title="Sector allocation"
-            action={
-              <Link
-                href={`/${slug}/sectors`}
-                className="text-xs font-medium text-accent hover:underline"
-              >
-                All sectors
-              </Link>
-            }
-          />
-          <div className="p-4 sm:p-6">
-            {sectorData.length > 0 ? (
-              <SectorBarChart data={sectorData} fund={fund.slug} />
-            ) : (
-              <p className="py-8 text-center text-sm text-muted">
-                No sector data yet. Officers add sectors and set targets under
-                Fund Admin → Sectors.
-              </p>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      <Card className="overflow-hidden">
-        <CardHeader
-          title="Largest positions"
-          action={
-            <Link
-              href={`/${slug}/holdings`}
-              className="text-xs font-medium text-accent hover:underline"
-            >
-              {v.holdings.length > topHoldings.length
-                ? `All ${v.holdings.length} holdings`
-                : "All holdings"}
-            </Link>
-          }
-        />
-        {topHoldings.length > 0 ? (
-          <HoldingsTable
-            holdings={topHoldings}
+          <DashboardCharts
             fund={fund.slug}
-            assetClass={fund.asset_class}
-            compact
+            totalValue={v.totalValue}
+            dayChange={v.dayChange}
+            dayChangePct={v.dayChangePct}
+            benchmarkName={fund.benchmark_name}
           />
-        ) : (
-          <p className="px-4 py-8 text-center text-sm text-muted">
-            No positions yet. The PM adds holdings under Fund Admin → Holdings.
-          </p>
-        )}
-      </Card>
 
-      {isFixedIncome && (
-        <Card>
-          <CardHeader title="Allocation by instrument type" />
-          <div className="p-4 sm:p-6">
-            {donutData.length > 0 ? (
-              <AllocationDonut data={donutData} fund={fund.slug} />
+          {isFixedIncome && <RatesStrip />}
+
+          <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+            <Card>
+              <CardHeader
+                title="Today's movers"
+                action={
+                  <Link
+                    href={`/${slug}/holdings`}
+                    className="text-xs font-medium text-accent hover:underline"
+                  >
+                    All holdings
+                  </Link>
+                }
+              />
+              <div className="p-3 sm:p-4">
+                {gainers.length === 0 && losers.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-sm text-muted">
+                    {isFixedIncome
+                      ? "Bond prices move with marks and the nightly snapshot — open Holdings for current prices and sources."
+                      : "No live price moves yet. Check back during market hours, or add holdings under Fund Admin → Holdings."}
+                  </p>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
+                    <div>
+                      <p className="px-2 pb-1 text-[11px] uppercase tracking-wider text-muted">
+                        Top gainers
+                      </p>
+                      {gainers.length > 0 ? (
+                        gainers.map((h) => (
+                          <MoverRow key={h.holding.id} fund={slug} h={h} />
+                        ))
+                      ) : (
+                        <p className="px-2 py-2 text-xs text-muted">
+                          Nothing up today
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="px-2 pb-1 text-[11px] uppercase tracking-wider text-muted">
+                        Top losers
+                      </p>
+                      {losers.length > 0 ? (
+                        losers.map((h) => (
+                          <MoverRow key={h.holding.id} fund={slug} h={h} />
+                        ))
+                      ) : (
+                        <p className="px-2 py-2 text-xs text-muted">
+                          Nothing down today
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Sector allocation"
+                action={
+                  <Link
+                    href={`/${slug}/sectors`}
+                    className="text-xs font-medium text-accent hover:underline"
+                  >
+                    All sectors
+                  </Link>
+                }
+              />
+              <div className="p-4 sm:p-6">
+                {sectorData.length > 0 ? (
+                  <SectorBarChart data={sectorData} fund={fund.slug} />
+                ) : (
+                  <p className="py-8 text-center text-sm text-muted">
+                    No sector data yet. Officers add sectors and set targets under
+                    Fund Admin → Sectors.
+                  </p>
+                )}
+              </div>
+            </Card>
+          </div>
+
+          <Card className="overflow-hidden">
+            <CardHeader
+              title="Largest positions"
+              action={
+                <Link
+                  href={`/${slug}/holdings`}
+                  className="text-xs font-medium text-accent hover:underline"
+                >
+                  {v.holdings.length > topHoldings.length
+                    ? `All ${v.holdings.length} holdings`
+                    : "All holdings"}
+                </Link>
+              }
+            />
+            {topHoldings.length > 0 ? (
+              <HoldingsTable
+                holdings={topHoldings}
+                fund={fund.slug}
+                assetClass={fund.asset_class}
+                compact
+              />
             ) : (
-              <p className="py-8 text-center text-sm text-muted">
-                No positions yet. The PM adds holdings under Fund Admin →
-                Holdings.
+              <p className="px-4 py-8 text-center text-sm text-muted">
+                No positions yet. The PM adds holdings under Fund Admin → Holdings.
               </p>
             )}
-          </div>
-        </Card>
+          </Card>
+
+          {isFixedIncome && (
+            <Card>
+              <CardHeader title="Allocation by instrument type" />
+              <div className="p-4 sm:p-6">
+                {donutData.length > 0 ? (
+                  <AllocationDonut data={donutData} fund={fund.slug} />
+                ) : (
+                  <p className="py-8 text-center text-sm text-muted">
+                    No positions yet. The PM adds holdings under Fund Admin →
+                    Holdings.
+                  </p>
+                )}
+              </div>
+            </Card>
+          )}
+        </>
+      ) : (
+        <AlumniNotice fundName={fund.name} />
       )}
 
       <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">

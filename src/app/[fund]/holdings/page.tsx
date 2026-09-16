@@ -10,6 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { valueFund } from "@/lib/valuation";
 import { HoldingsTable } from "@/components/holdings/HoldingsTable";
 import { Badge } from "@/components/ui/Badge";
+import { AlumniNotice } from "@/components/ui/AlumniNotice";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Holdings" };
@@ -22,6 +23,15 @@ export default async function HoldingsPage({
   const { fund: slug } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
+
+  if (!ctx.canViewCurrent) {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <h1 className="text-2xl font-bold sm:text-3xl">Holdings</h1>
+        <AlumniNotice fundName={ctx.fund.name} />
+      </div>
+    );
+  }
 
   const supabase = await createSupabaseServerClient();
   const valuation = await valueFund(supabase, ctx.fund.id);

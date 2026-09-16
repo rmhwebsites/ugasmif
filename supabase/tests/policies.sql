@@ -355,3 +355,73 @@ rollback;
 reset role;
 update funds set vote_pass_threshold_pct = 60, vote_quorum_pct = null
 where id = '22222222-2222-2222-2222-222222222222';
+
+\echo ''
+\echo '############ ALUMNI VIEW HORIZON (settings.alumni_can_view_current) ############'
+
+-- An alumnus of a past year, on a fund that has turned the setting off, keeps
+-- the record of what the fund did on their watch and loses the live book.
+reset role;
+
+insert into academic_years (id, label, starts_on, ends_on, is_current)
+values ('11111111-1111-1111-1111-111111111110', '2025-26', '2025-08-01', '2026-07-31', false);
+
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('aaaaaaaa-0000-0000-0000-00000000000a', 'alum@uga.edu', '{"full_name":"Alumna"}');
+insert into memberships (user_id, fund_id, academic_year_id, role, status, sector_id)
+values ('aaaaaaaa-0000-0000-0000-00000000000a', '22222222-2222-2222-2222-222222222222',
+        '11111111-1111-1111-1111-111111111110', 'analyst', 'alumni',
+        '33333333-3333-3333-3333-333333333333');
+
+-- One snapshot and one trade from their year, one of each from after it.
+insert into fund_snapshots (fund_id, snapshot_date, market_value, cash, total_value,
+                            benchmark_symbol) values
+  ('22222222-2222-2222-2222-222222222222', '2026-05-01', 100, 10, 110, 'SPY'),
+  ('22222222-2222-2222-2222-222222222222', '2026-09-01', 200, 20, 220, 'SPY');
+insert into trades (fund_id, holding_id, action, quantity, price, amount,
+                    trade_date, executed_by) values
+  ('22222222-2222-2222-2222-222222222222', '66666666-0000-0000-0000-000000000001',
+   'buy', 10, 300, 3000, '2026-05-02', 'aaaaaaaa-0000-0000-0000-000000000001'),
+  ('22222222-2222-2222-2222-222222222222', '66666666-0000-0000-0000-000000000001',
+   'buy', 10, 400, 4000, '2026-09-02', 'aaaaaaaa-0000-0000-0000-000000000001');
+
+set role authenticated;
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-00000000000a';
+
+\echo ''
+\echo '--- alumna, setting ON (default) ...... expect holdings 1, snaps 2, trades 2'
+select (select count(*) from holdings)       as holdings,
+       (select count(*) from fund_snapshots) as snapshots,
+       (select count(*) from trades)         as trades;
+
+reset role;
+update funds set settings = settings || '{"alumni_can_view_current": false}'::jsonb
+where id = '22222222-2222-2222-2222-222222222222';
+set role authenticated;
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-00000000000a';
+
+\echo ''
+\echo '--- alumna, setting OFF ............... expect holdings 0, snaps 1, trades 1'
+select (select count(*) from holdings)       as holdings,
+       (select count(*) from fund_snapshots) as snapshots,
+       (select count(*) from trades)         as trades;
+
+\echo ''
+\echo '--- alumna still reads the pitch record ............ expect more than 0'
+select count(*) as pitches from pitches;
+
+\echo ''
+\echo '--- a current member is untouched by the setting . expect holdings 1, snaps 2'
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000002';
+select (select count(*) from holdings)       as holdings,
+       (select count(*) from fund_snapshots) as snapshots;
+
+\echo ''
+\echo '--- the faculty advisor is untouched ............. expect holdings 1, snaps 2'
+set request.jwt.claim.sub = 'aaaaaaaa-0000-0000-0000-000000000006';
+select (select count(*) from holdings)       as holdings,
+       (select count(*) from fund_snapshots) as snapshots;
+
+reset role;
+update funds set settings = settings || '{"alumni_can_view_current": true}'::jsonb
+where id = '22222222-2222-2222-2222-222222222222';
