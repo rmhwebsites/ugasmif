@@ -154,8 +154,14 @@ export function PitchEditor({
 
   // Security search
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  // Results carry the query they answer, so a new keystroke never shows the
+  // previous term's matches while the debounce is in flight.
+  const [search, setSearch] = useState<{ q: string; results: SearchResult[] }>({
+    q: "",
+    results: [],
+  });
   const [searching, setSearching] = useState(false);
+  const results = search.q === query.trim() ? search.results : [];
 
   // Files
   const [fileRows, setFileRows] = useState<PitchFile[]>(files);
@@ -231,18 +237,15 @@ export function PitchEditor({
   useEffect(() => {
     if (securityMode !== "listed") return;
     const q = query.trim();
-    if (q === "") {
-      setResults([]);
-      return;
-    }
+    if (q === "") return;
     const t = setTimeout(async () => {
       setSearching(true);
       try {
         const res = await fetch(`/api/market/search?q=${encodeURIComponent(q)}`);
         const json: { results?: SearchResult[] } = await res.json();
-        setResults(json.results ?? []);
+        setSearch({ q, results: json.results ?? [] });
       } catch {
-        setResults([]);
+        setSearch({ q, results: [] });
       }
       setSearching(false);
     }, 300);
@@ -258,7 +261,6 @@ export function PitchEditor({
         r.type === "EQUITY" ? "equity" : r.type === "ETF" ? "etf" : r.type.toLowerCase(),
     }));
     setQuery("");
-    setResults([]);
   }
 
   function pickHolding(id: string) {

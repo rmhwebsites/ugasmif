@@ -107,11 +107,12 @@ export class TreasuryCurveProvider implements BondPriceProvider {
 export class FinnhubProvider implements BondPriceProvider {
   readonly name = "finnhub";
 
-  async getPrice(_input: {
-    cusip?: string;
-    isin?: string;
-    asOf?: Date;
-  }): Promise<{ cleanPrice: number; ytm?: number; asOf: Date; source: string } | null> {
+  async getPrice(): Promise<{
+    cleanPrice: number;
+    ytm?: number;
+    asOf: Date;
+    source: string;
+  } | null> {
     if (!process.env.FINNHUB_API_KEY) {
       throw new Error(
         "FinnhubProvider not configured: set FINNHUB_API_KEY to enable Finnhub bond pricing."

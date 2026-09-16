@@ -44,7 +44,7 @@ export function FundSwitcher({
       sub.length > 0 && SHARED_ROOTS.includes(sub[0])
         ? `/${slug}/${sub.join("/")}`
         : `/${slug}`;
-    document.cookie = `smif_fund=${slug};path=/;max-age=31536000;samesite=lax`;
+    // The destination fund's layout records smif_fund via <FundCookie />.
     router.push(target);
   }
 

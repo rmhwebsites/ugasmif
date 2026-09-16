@@ -26,6 +26,7 @@ export default async function HoldingsAdminPage({
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
   const writable = canExecute(ctx);
+  const renderedAt = new Date();
 
   const supabase = await createSupabaseServerClient();
   const [holdingsRes, sectorsRes, marksRes] = await Promise.all([
@@ -88,7 +89,10 @@ export default async function HoldingsAdminPage({
         holdings={holdings}
         sectors={sectors}
         latestMarks={latestMarks}
-        staleDays={Number(ctx.fund.settings.stale_mark_days ?? 7)}
+        staleCutoff={
+          renderedAt.getTime() -
+          Number(ctx.fund.settings.stale_mark_days ?? 7) * 24 * 60 * 60 * 1000
+        }
       />
 
       <Card>

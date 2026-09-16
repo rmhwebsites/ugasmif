@@ -94,7 +94,7 @@ export default async function AdminChecklistPage({
       latestMarkByHolding.set(m.holding_id, m);
     }
   }
-  const staleCutoff = Date.now() - staleDays * 24 * 60 * 60 * 1000;
+  const staleCutoff = now.getTime() - staleDays * 24 * 60 * 60 * 1000;
   const staleMarks = manualHoldings
     .map((h) => ({ holding: h, mark: latestMarkByHolding.get(h.id) ?? null }))
     .filter(
@@ -107,7 +107,7 @@ export default async function AdminChecklistPage({
   const invitedRecently = recentMembers.filter((m) => {
     const created = m.profiles?.created_at;
     return created
-      ? Date.now() - new Date(created).getTime() < 30 * 24 * 60 * 60 * 1000
+      ? now.getTime() - new Date(created).getTime() < 30 * 24 * 60 * 60 * 1000
       : false;
   });
 

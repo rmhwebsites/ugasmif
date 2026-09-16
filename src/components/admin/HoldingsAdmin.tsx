@@ -6,7 +6,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { HoldingForm } from "@/components/admin/HoldingForm";
 import { MarkEntry } from "@/components/admin/MarkEntry";
 import { formatBondPrice, formatDate, formatNumber } from "@/lib/format";
@@ -17,14 +16,15 @@ export function HoldingsAdmin({
   holdings,
   sectors,
   latestMarks,
-  staleDays,
+  staleCutoff,
 }: {
   fund: string;
   holdings: Holding[];
   sectors: Pick<Sector, "id" | "name">[];
   /** holding_id -> latest mark */
   latestMarks: Record<string, BondMark | undefined>;
-  staleDays: number;
+  /** Marks older than this epoch ms are stale; computed on the server. */
+  staleCutoff: number;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -42,8 +42,6 @@ export function HoldingsAdmin({
     });
     router.refresh();
   }
-
-  const staleCutoff = Date.now() - staleDays * 24 * 60 * 60 * 1000;
 
   return (
     <div className="glass-card overflow-hidden">

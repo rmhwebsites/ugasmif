@@ -59,14 +59,20 @@ export function StockChart({
   const { resolvedTheme } = useTheme();
 
   const [period, setPeriod] = useState<ChartPeriod>("1y");
-  const [points, setPoints] = useState<HistoryPointDto[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The result carries the request it answers, so changing symbol or period
+  // falls back to the skeleton without resetting state inside the effect.
+  const [result, setResult] = useState<{
+    key: string;
+    points: HistoryPointDto[];
+    error: string | null;
+  } | null>(null);
+
+  const requestKey = `${symbol}:${period}`;
 
   // Fetch history when symbol/period change.
   useEffect(() => {
     const controller = new AbortController();
-    setPoints(null);
-    setError(null);
+    const key = `${symbol}:${period}`;
     fetch(
       `/api/market/history/${encodeURIComponent(symbol)}?period=${period}`,
       { signal: controller.signal }
@@ -74,16 +80,24 @@ export function StockChart({
       .then(async (res) => {
         if (!res.ok) throw new Error(`history request failed (${res.status})`);
         const body = (await res.json()) as { points?: HistoryPointDto[] };
-        setPoints(body.points ?? []);
+        setResult({ key, points: body.points ?? [], error: null });
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         console.error(`stock history failed for ${symbol}:`, err);
-        setError("Chart data is unavailable right now. Try another period or refresh.");
-        setPoints([]);
+        setResult({
+          key,
+          points: [],
+          error:
+            "Chart data is unavailable right now. Try another period or refresh.",
+        });
       });
     return () => controller.abort();
   }, [symbol, period]);
+
+  const current = result?.key === requestKey ? result : null;
+  const points = current?.points ?? null;
+  const error = current?.error ?? null;
 
   // Deduped, ascending series. Intraday ISO timestamps → UTCTimestamp.
   const { series, intraday } = useMemo((): {

@@ -53,17 +53,22 @@ export function DashboardCharts({
   benchmarkName,
 }: Props) {
   const [period, setPeriod] = useState<Period>("3mo");
-  const [points, setPoints] = useState<ChartPoint[] | null>(null);
-  const [benchmark, setBenchmark] = useState<ChartPoint[]>([]);
-  const [failed, setFailed] = useState(false);
   const [hovered, setHovered] = useState<{ value: number; time: string } | null>(
     null
   );
+  // Results carry the request they answer, so switching periods shows the
+  // skeleton again without a synchronous reset inside the effect.
+  const [result, setResult] = useState<{
+    key: string;
+    points: ChartPoint[] | null;
+  } | null>(null);
+  const [benchmarkResult, setBenchmarkResult] = useState<ChartPoint[]>([]);
+
+  const requestKey = `${fund}:${period}`;
 
   useEffect(() => {
     let cancelled = false;
-    setPoints(null);
-    setFailed(false);
+    const key = `${fund}:${period}`;
     fetch(`/api/${fund}/portfolio/history?period=${period}`)
       .then((r) => {
         if (!r.ok) throw new Error(`history ${r.status}`);
@@ -74,16 +79,24 @@ export function DashboardCharts({
       })
       .then((json) => {
         if (cancelled) return;
-        setPoints(json.points ?? []);
-        setBenchmark(json.benchmark ?? []);
+        setResult({ key, points: json.points ?? [] });
+        setBenchmarkResult(json.benchmark ?? []);
       })
       .catch(() => {
-        if (!cancelled) setFailed(true);
+        if (!cancelled) setResult({ key, points: null });
       });
     return () => {
       cancelled = true;
     };
   }, [fund, period]);
+
+  const current = result?.key === requestKey ? result : null;
+  const points = current?.points ?? null;
+  const failed = current !== null && current.points === null;
+  const benchmark = useMemo(
+    () => (current ? benchmarkResult : []),
+    [current, benchmarkResult]
+  );
 
   const handleCrosshairMove = useCallback(
     (value: number | null, time: string | null) => {
