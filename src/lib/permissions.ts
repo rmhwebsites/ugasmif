@@ -183,6 +183,18 @@ export function can(
   }
 }
 
+/**
+ * May this person open the Fund Admin section at all (SPEC 11.3)?
+ *
+ * The admin layout also admits the strategy-team leader, who needs
+ * /[fund]/admin/sectors to set the fund's target weights and nothing else
+ * under /admin. Every other admin page calls this first, so widening that one
+ * door never opens the rest of the corridor.
+ */
+export function hasFundAdminAccess(ctx: FundContext): boolean {
+  return isOfficer(ctx) || ctx.isFacultyAdvisor || ctx.isAppAdmin;
+}
+
 /** Human label for a member's role in a fund, e.g. "Portfolio Manager". */
 export function roleLabel(
   role: MembershipRole | null,

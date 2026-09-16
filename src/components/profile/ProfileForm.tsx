@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, Save } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { AvatarUpload } from "@/components/ui/AvatarUpload";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 
@@ -32,8 +33,15 @@ function initials(name: string): string {
   );
 }
 
-export function ProfileForm({ initial }: { initial: ProfileFormInitial }) {
+export function ProfileForm({
+  initial,
+  userId,
+}: {
+  initial: ProfileFormInitial;
+  userId: string;
+}) {
   const router = useRouter();
+  const [uploading, setUploading] = useState(false);
 
   // ── Details form ──────────────────────────────────────────────────────────
   const [fullName, setFullName] = useState(initial.full_name);
@@ -116,35 +124,20 @@ export function ProfileForm({ initial }: { initial: ProfileFormInitial }) {
     setPwSaved(true);
   }
 
-  const avatarPreview = avatarUrl.trim();
-
   return (
     <div className="space-y-4 sm:space-y-6">
       <Card>
         <CardHeader title="Your details" />
         <form onSubmit={handleSave} className="space-y-4 p-4 sm:p-6">
-          <div className="flex items-center gap-4">
-            {avatarPreview ? (
-              // Plain URL preview — no upload pipeline, by design.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={avatarPreview}
-                alt=""
-                className="h-14 w-14 rounded-full border border-card-border object-cover"
-              />
-            ) : (
-              <div
-                aria-hidden="true"
-                className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-base font-semibold text-accent"
-              >
-                {initials(fullName)}
-              </div>
-            )}
-            <p className="text-xs text-muted">
-              Paste a link to a photo (a UGA directory photo or LinkedIn image
-              URL works). Leave it blank to use your initials.
-            </p>
-          </div>
+          <AvatarUpload
+            userId={userId}
+            value={avatarUrl === "" ? null : avatarUrl}
+            initials={initials(fullName)}
+            onChange={setAvatarUrl}
+            onError={setSaveError}
+            onUploadingChange={setUploading}
+            size="md"
+          />
 
           <div>
             <label
@@ -160,23 +153,6 @@ export function ProfileForm({ initial }: { initial: ProfileFormInitial }) {
               maxLength={120}
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="profile-avatar"
-              className="mb-1 block text-xs font-medium text-muted"
-            >
-              Avatar URL
-            </label>
-            <input
-              id="profile-avatar"
-              type="url"
-              placeholder="https://…"
-              value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
               className={inputClass}
             />
           </div>
@@ -220,7 +196,7 @@ export function ProfileForm({ initial }: { initial: ProfileFormInitial }) {
           {saveError && <p className="text-sm text-loss">{saveError}</p>}
           {saved && <p className="text-sm text-gain">Profile saved.</p>}
 
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || uploading}>
             <Save className="h-4 w-4" aria-hidden="true" />
             {saving ? "Saving…" : "Save changes"}
           </Button>

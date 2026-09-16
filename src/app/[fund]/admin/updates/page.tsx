@@ -3,7 +3,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
-import { can } from "@/lib/permissions";
+import { can, hasFundAdminAccess } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { UpdateEditor } from "@/components/admin/UpdateEditor";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -19,6 +19,8 @@ export default async function UpdatesAdminPage({
   const { fund: slug } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
+
+  if (!hasFundAdminAccess(ctx)) notFound();
 
   if (!can(ctx, "post_updates")) {
     return (

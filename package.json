@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "seed": "tsx scripts/seed.ts",
-    "export-roster": "tsx scripts/export-roster.ts"
+    "export-roster": "tsx scripts/export-roster.ts",
+    "migrate": "node scripts/apply-migrations.mjs",
+    "gen-types": "supabase gen types typescript --project-id ${SUPABASE_PROJECT_REF:-ucvmssmmnzltwzrdybko} --schema public > src/types/database.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

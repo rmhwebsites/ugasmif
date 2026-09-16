@@ -18,6 +18,12 @@ export const metadata: Metadata = {
   description:
     "UGA Student Managed Investment Fund — Athena Stock Fund and Arch Bond Fund",
   manifest: "/manifest.json",
+  // public/apple-touch-icon.png is not one of the filenames Next picks up
+  // automatically, and without this iOS uses a screenshot of the page for the
+  // home-screen icon instead of the mark.
+  icons: {
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

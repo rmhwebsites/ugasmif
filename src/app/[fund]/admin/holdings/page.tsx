@@ -5,7 +5,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
-import { canExecute } from "@/lib/permissions";
+import { canExecute, hasFundAdminAccess } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { HoldingsAdmin } from "@/components/admin/HoldingsAdmin";
 import { HoldingForm } from "@/components/admin/HoldingForm";
@@ -25,6 +25,7 @@ export default async function HoldingsAdminPage({
   const { fund: slug } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
+  if (!hasFundAdminAccess(ctx)) notFound();
   const writable = canExecute(ctx);
   const renderedAt = new Date();
 

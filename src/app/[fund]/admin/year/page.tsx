@@ -4,7 +4,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
-import { can } from "@/lib/permissions";
+import { can, hasFundAdminAccess } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { YearRollover } from "@/components/admin/YearRollover";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -28,6 +28,8 @@ export default async function YearAdminPage({
   const { fund: slug } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
+
+  if (!hasFundAdminAccess(ctx)) notFound();
 
   if (!can(ctx, "manage_roster")) {
     return (

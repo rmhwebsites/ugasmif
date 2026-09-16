@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
+import { hasFundAdminAccess } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/Badge";
 import { RunBackupButton } from "@/components/admin/RunBackupButton";
@@ -31,6 +32,7 @@ export default async function AdminChecklistPage({
   const { fund: slug } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
+  if (!hasFundAdminAccess(ctx)) notFound();
 
   const supabase = await createSupabaseServerClient();
   const staleDays = Number(ctx.fund.settings.stale_mark_days ?? 7);

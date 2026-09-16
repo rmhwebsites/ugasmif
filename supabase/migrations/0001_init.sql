@@ -913,12 +913,7 @@ begin
     raise exception 'close_pitch_vote: pitch % not found', p_pitch_id;
   end if;
 
-  -- nullif: PostgREST leaves request.jwt.claims as the empty string on some
-  -- paths, and ''::jsonb raises instead of returning null — which would turn
-  -- a plain permission check into a confusing JSON syntax error.
-  v_is_service := coalesce(
-    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role',
-    '') = 'service_role';
+  v_is_service := coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '') = 'service_role';
   if not (v_is_service or is_fund_officer(p.fund_id)) then
     raise exception 'close_pitch_vote: only fund officers or the scheduler can close a vote';
   end if;

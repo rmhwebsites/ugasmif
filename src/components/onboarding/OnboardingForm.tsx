@@ -1,18 +1,14 @@
 "use client";
 
-// First-run onboarding form. The photo goes straight to Supabase Storage from
-// the browser (RLS lets a member write only their own {user_id}/ folder), then
-// the resulting URL is saved with the rest of the details in one request.
+// First-run onboarding form. The photo goes through <AvatarUpload>, straight
+// from the browser to Supabase Storage, and the resulting URL is saved with
+// the rest of the details in one request.
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { AvatarUpload } from "@/components/ui/AvatarUpload";
 import { Button } from "@/components/ui/Button";
 import { SmifSpinner } from "@/components/ui/SmifSpinner";
-
-const MAX_BYTES = 2 * 1024 * 1024; // 2MB
-const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "image/heic"];
 
 export interface SectorPicker {
   membershipId: string;
@@ -48,7 +44,6 @@ export function OnboardingForm({
   pickers: SectorPicker[];
 }) {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [firstName, setFirstName] = useState(initialFirstName);
   const [lastName, setLastName] = useState(initialLastName);
   const [phone, setPhone] = useState(initialPhone);
@@ -56,47 +51,9 @@ export function OnboardingForm({
     Object.fromEntries(pickers.map((p) => [p.membershipId, p.currentSectorId ?? ""]))
   );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
-  const [preview, setPreview] = useState<string | null>(initialAvatarUrl);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError(null);
-
-    if (!ACCEPTED.includes(file.type)) {
-      setError("Use a JPEG, PNG, or WebP image.");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      setError(
-        `That photo is ${(file.size / 1024 / 1024).toFixed(1)}MB. Keep it under 2MB.`
-      );
-      return;
-    }
-
-    setUploading(true);
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
-
-    const supabase = createClient();
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-    const path = `${userId}/avatar-${Date.now()}.${ext}`;
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true, contentType: file.type });
-    setUploading(false);
-
-    if (uploadError) {
-      setError(`Photo upload failed: ${uploadError.message}`);
-      setPreview(avatarUrl);
-      return;
-    }
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-    setAvatarUrl(data.publicUrl);
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -134,47 +91,14 @@ export function OnboardingForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Photo */}
-      <div className="flex items-center gap-4">
-        <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-highlight">
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={preview}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center text-xl font-semibold text-muted">
-              {initials(firstName, lastName)}
-            </span>
-          )}
-          {uploading && (
-            <span className="absolute inset-0 flex items-center justify-center bg-black/50">
-              <SmifSpinner size="sm" label="Uploading photo" />
-            </span>
-          )}
-        </div>
-        <div className="min-w-0">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-          >
-            <Camera className="h-4 w-4" />
-            {preview ? "Change photo" : "Add a photo"}
-          </Button>
-          <p className="mt-1 text-xs text-muted">JPEG, PNG or WebP, under 2MB.</p>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept={ACCEPTED.join(",")}
-          onChange={handleFile}
-          className="hidden"
-        />
-      </div>
+      <AvatarUpload
+        userId={userId}
+        value={avatarUrl}
+        initials={initials(firstName, lastName)}
+        onChange={setAvatarUrl}
+        onError={setError}
+        onUploadingChange={setUploading}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
         <div>

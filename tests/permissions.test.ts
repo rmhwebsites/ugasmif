@@ -17,6 +17,7 @@ import {
   isActiveVoter,
   isOfficer,
   leadsSector,
+  hasFundAdminAccess,
   leadsStrategyTeam,
   roleLabel,
   type PermissionAction,
@@ -527,6 +528,35 @@ describe("matrix: set sector targets and benchmark weights", () => {
     expect(
       can(president, "set_sector_targets", { isStrategyLeader: false })
     ).toBe(true);
+  });
+});
+
+describe("hasFundAdminAccess", () => {
+  it("is officers, the advisor and app admins", () => {
+    for (const [label, who] of [
+      ["president", president],
+      ["vice_president", vicePresident],
+      ["alumni_relations", alumniRelations],
+      ["pm", pm],
+      ["advisor", advisor],
+      ["app admin", appAdmin],
+    ] as const) {
+      expect(`${label}:${hasFundAdminAccess(who)}`).toBe(`${label}:true`);
+    }
+  });
+
+  it("is NOT the strategy-team leader, who only needs /admin/sectors", () => {
+    // The admin layout admits them so the sectors page can render; every
+    // other admin page calls this and turns them away. Without it, widening
+    // that one door opened Fund Settings to a sector leader.
+    expect(leadsStrategyTeam(strategyLeader)).toBe(true);
+    expect(hasFundAdminAccess(strategyLeader)).toBe(false);
+  });
+
+  it("is not an ordinary member", () => {
+    for (const who of [analyst, sectorLeader, viewer, alumnus]) {
+      expect(hasFundAdminAccess(who)).toBe(false);
+    }
   });
 });
 

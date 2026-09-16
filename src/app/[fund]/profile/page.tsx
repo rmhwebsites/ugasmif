@@ -56,6 +56,7 @@ export default async function ProfilePage({
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <ProfileForm
+            userId={ctx.profile.id}
             initial={{
               full_name: ctx.profile.full_name,
               avatar_url: ctx.profile.avatar_url,
