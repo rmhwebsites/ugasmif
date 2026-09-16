@@ -11,8 +11,9 @@
  * bonds are placeholders the Arch PM replaces on day one.
  *
  * Idempotent: rerunning upserts the same rows rather than duplicating them.
- * It also resets seeded quantities, fund settings and cash balances back to
- * the seed values, so do not run it against a fund that holds real positions.
+ * It also resets seeded quantities, fund settings, cash balances and the
+ * global flags on the seeded profiles back to the seed values, so do not run
+ * it against a fund that holds real positions.
  *
  * This script runs outside Next, so it builds its own service-role client
  * instead of importing @/lib/supabase/service (which is server-only and
@@ -286,7 +287,7 @@ const FUNDS: FundSeed[] = [
       sector_can_vote_on_own_pitch: true,
       alumni_can_view_current: true,
       auto_open_votes: false,
-      stale_mark_days: 14,
+      stale_mark_days: 7,
     },
   },
 ];
@@ -824,13 +825,17 @@ async function seedPeople(core: Core): Promise<{
       created += 1;
     }
     idByEmail.set(key, id);
+    // The full_name is only written when the account is new, so rerunning the
+    // seed never renames a real person who happens to share an address (the
+    // app admin, usually).
+    const profilePatch: Record<string, unknown> = {
+      is_app_admin: user.is_app_admin ?? false,
+      is_faculty_advisor: user.is_faculty_advisor ?? false,
+    };
+    if (!existing.has(key)) profilePatch.full_name = user.full_name;
     const { error: profileError } = await db
       .from("profiles")
-      .update({
-        full_name: user.full_name,
-        is_app_admin: user.is_app_admin ?? false,
-        is_faculty_advisor: user.is_faculty_advisor ?? false,
-      })
+      .update(profilePatch)
       .eq("id", id);
     if (profileError) {
       console.warn(`  profile ${user.email}: ${profileError.message}`);
@@ -1437,13 +1442,19 @@ async function seedPitches(
     written += 1;
 
     // Spread the tally across real placeholder voters so the officer-only
-    // "who voted what" view has something to show.
-    const ballots = voters.slice(0, cast).map((voterId, index) => ({
+    // "who voted what" view has something to show. The starting point rotates
+    // per pitch (deterministically) so it is not the same faces every time.
+    const offset = voters.length > 0 ? seedFrom(pitch.title) % voters.length : 0;
+    const rotated = [...voters.slice(offset), ...voters.slice(0, offset)];
+    const castAt = closedAt
+      ? new Date(Date.parse(closedAt) - 3_600_000).toISOString()
+      : new Date().toISOString();
+    const ballots = rotated.slice(0, cast).map((voterId, index) => ({
       pitch_id: pitchId,
       voter_id: voterId,
       choice: index < pitch.votes_yes ? "yes" : "no",
       comment: null,
-      cast_at: (closedAt ?? new Date().toISOString()) as string,
+      cast_at: castAt,
     }));
     if (ballots.length > 0) {
       check(
