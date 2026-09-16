@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { CalendarClock, Hourglass, Vote } from "lucide-react";
 import { getAuthState, getFundContext } from "@/lib/fund";
 import { isOfficer } from "@/lib/permissions";
+import { voteRule } from "@/lib/votes";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge, PitchStatusBadge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -269,12 +270,8 @@ export default async function AdminPitchesPage({
                       yes={yes}
                       no={no}
                       eligible={p.eligible_voters}
-                      thresholdPct={Number(ctx.fund.vote_pass_threshold_pct)}
-                      quorumPct={
-                        ctx.fund.vote_quorum_pct === null
-                          ? null
-                          : Number(ctx.fund.vote_quorum_pct)
-                      }
+                      thresholdPct={voteRule(p, ctx.fund).thresholdPct}
+                      quorumPct={voteRule(p, ctx.fund).quorumPct}
                       live
                       voters={voters}
                     />

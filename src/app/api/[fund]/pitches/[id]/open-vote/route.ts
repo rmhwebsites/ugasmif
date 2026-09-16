@@ -85,6 +85,11 @@ export async function openPitchVote(
       vote_opens_at: opens.toISOString(),
       vote_closes_at: closes.toISOString(),
       eligible_voters: eligible,
+      // Freeze the rule too, not just the population: a threshold changed
+      // mid-vote must not move the bar under the people already voting.
+      threshold_pct: Number(fund.vote_pass_threshold_pct),
+      quorum_pct:
+        fund.vote_quorum_pct === null ? null : Number(fund.vote_quorum_pct),
     })
     .eq("id", pitch.id)
     .select("*")

@@ -21,6 +21,9 @@ interface CloseResult {
   eligible_voters?: number | null;
   ticket_id?: string | null;
   already_closed?: boolean;
+  /** The rule the vote was judged under, frozen when it opened (SPEC 12). */
+  threshold_pct?: number | null;
+  quorum_pct?: number | null;
 }
 
 export async function POST(
@@ -97,7 +100,9 @@ export async function POST(
         ? pitch.action === "rebalance"
           ? "The rebalance passed. An officer will apply the new sector targets from the admin page."
           : "A trade ticket is ready for the portfolio manager to execute."
-        : `It needed ${formatPercent(Number(ctx.fund.vote_pass_threshold_pct))} yes to pass.`,
+        : `It needed ${formatPercent(
+            Number(result.threshold_pct ?? ctx.fund.vote_pass_threshold_pct)
+          )} yes to pass.`,
     ],
     ctaLabel: "View the pitch",
     ctaPath: `/${ctx.fund.slug}/pitches/${pitch.id}`,

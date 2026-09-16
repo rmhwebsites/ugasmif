@@ -260,3 +260,98 @@ join pg_class c on c.relname = t.tablename
 where t.schemaname = 'public'
   and not c.relrowsecurity
   and t.tablename <> 'schema_migrations';
+
+\echo ''
+\echo '############ FROZEN VOTE RULES (SPEC Section 12) ############'
+
+-- A pitch is judged by the threshold and quorum in force when voting OPENED,
+-- not by whatever the fund's settings say at close. Three pitches, identical
+-- ballots (2 yes / 1 no = 66.67%), differing only in what was frozen.
+reset role;
+
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('aaaaaaaa-0000-0000-0000-000000000008', 'voter.a@uga.edu', '{"full_name":"Voter A"}'),
+  ('aaaaaaaa-0000-0000-0000-000000000009', 'voter.b@uga.edu', '{"full_name":"Voter B"}');
+insert into memberships (user_id, fund_id, academic_year_id, role, sector_id) values
+  ('aaaaaaaa-0000-0000-0000-000000000008', '22222222-2222-2222-2222-222222222222',
+   '11111111-1111-1111-1111-111111111111', 'analyst', '33333333-3333-3333-3333-333333333333'),
+  ('aaaaaaaa-0000-0000-0000-000000000009', '22222222-2222-2222-2222-222222222222',
+   '11111111-1111-1111-1111-111111111111', 'analyst', '33333333-3333-3333-3333-333333333333');
+
+-- (a) froze 60 at open, (b) froze nothing (opened before migration 0004),
+-- (c) froze 60 with no quorum.
+insert into pitches (id, fund_id, sector_id, author_id, title, pitch_type, action,
+                     status, vote_opens_at, vote_closes_at, eligible_voters,
+                     threshold_pct, quorum_pct) values
+  ('88888888-0000-0000-0000-00000000000a', '22222222-2222-2222-2222-222222222222',
+   '33333333-3333-3333-3333-333333333333', 'aaaaaaaa-0000-0000-0000-000000000003',
+   'Frozen at 60', 'bull', 'buy', 'voting',
+   now() - interval '2 hours', now() - interval '1 minute', 3, 60, null),
+  ('88888888-0000-0000-0000-00000000000b', '22222222-2222-2222-2222-222222222222',
+   '33333333-3333-3333-3333-333333333333', 'aaaaaaaa-0000-0000-0000-000000000003',
+   'Nothing frozen', 'bull', 'buy', 'voting',
+   now() - interval '2 hours', now() - interval '1 minute', 3, null, null),
+  ('88888888-0000-0000-0000-00000000000c', '22222222-2222-2222-2222-222222222222',
+   '33333333-3333-3333-3333-333333333333', 'aaaaaaaa-0000-0000-0000-000000000003',
+   'Frozen with no quorum', 'bull', 'buy', 'voting',
+   now() - interval '2 hours', now() - interval '1 minute', 3, 60, null);
+
+insert into votes (pitch_id, voter_id, choice)
+select p.id, v.voter, v.choice
+from (values ('88888888-0000-0000-0000-00000000000a'::uuid),
+             ('88888888-0000-0000-0000-00000000000b'::uuid),
+             ('88888888-0000-0000-0000-00000000000c'::uuid)) as p(id),
+     (values ('aaaaaaaa-0000-0000-0000-000000000003'::uuid, 'yes'),
+             ('aaaaaaaa-0000-0000-0000-000000000008'::uuid, 'yes'),
+             ('aaaaaaaa-0000-0000-0000-000000000009'::uuid, 'no')) as v(voter, choice);
+
+-- The officers raise the bar and add a quorum AFTER all three opened.
+update funds set vote_pass_threshold_pct = 90, vote_quorum_pct = 100
+where id = '22222222-2222-2222-2222-222222222222';
+
+\echo ''
+\echo '--- 66.67% under a frozen 60, fund now 90 ..... expect passed / 60.00'
+begin;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+select r ->> 'status' as status, r ->> 'threshold_pct' as threshold
+from close_pitch_vote('88888888-0000-0000-0000-00000000000a') r;
+commit;
+
+\echo ''
+\echo '--- 66.67% with nothing frozen, fund now 90 ... expect failed / 90.00'
+begin;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+select r ->> 'status' as status, r ->> 'threshold_pct' as threshold
+from close_pitch_vote('88888888-0000-0000-0000-00000000000b') r;
+commit;
+
+\echo ''
+\echo '--- frozen null quorum ignores the fund 100% .... expect passed / null'
+begin;
+select set_config('request.jwt.claims', '{"role":"service_role"}', true);
+select r ->> 'status' as status, r ->> 'quorum_pct' as quorum
+from close_pitch_vote('88888888-0000-0000-0000-00000000000c') r;
+commit;
+
+-- An empty request.jwt.claims must reach the permission check, not blow up in
+-- ''::jsonb. A still-open pitch, so the already-closed branch cannot shadow it.
+insert into pitches (id, fund_id, sector_id, author_id, title, pitch_type, action,
+                     status, vote_opens_at, vote_closes_at, eligible_voters,
+                     threshold_pct)
+values ('88888888-0000-0000-0000-00000000000d', '22222222-2222-2222-2222-222222222222',
+        '33333333-3333-3333-3333-333333333333', 'aaaaaaaa-0000-0000-0000-000000000003',
+        'Still open', 'bull', 'buy', 'voting',
+        now() - interval '2 hours', now() - interval '1 minute', 3, 60);
+
+\echo ''
+\echo '--- empty jwt claim closing a vote ..... expect ERROR about officers'
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-0000-0000-000000000002', true);
+select set_config('request.jwt.claims', '', true);
+select close_pitch_vote('88888888-0000-0000-0000-00000000000d');
+rollback;
+
+reset role;
+update funds set vote_pass_threshold_pct = 60, vote_quorum_pct = null
+where id = '22222222-2222-2222-2222-222222222222';

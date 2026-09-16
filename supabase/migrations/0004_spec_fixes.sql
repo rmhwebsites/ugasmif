@@ -95,9 +95,9 @@ alter table pitches
   add column if not exists quorum_pct    numeric(5,2);
 
 comment on column pitches.threshold_pct is
-  'Pass threshold in force when this vote closed. Frozen so history does not move with fund settings.';
+  'Pass threshold in force when voting opened. Frozen so history does not move with fund settings. Null on pitches opened before this migration.';
 comment on column pitches.quorum_pct is
-  'Quorum in force when this vote closed, or null when the fund had none.';
+  'Quorum in force when voting opened, or null when the fund had none. Read it only when threshold_pct is set.';
 
 -- Backfill closed pitches from their fund's current settings: the best guess
 -- available, and better than leaving history unlabelled.
@@ -161,6 +161,8 @@ declare
   v_eligible int;
   v_pct numeric(6,2);
   v_status text;
+  v_threshold numeric(5,2);
+  v_quorum numeric(5,2);
   v_quorum_ok boolean := true;
   v_before jsonb;
   v_ticket_id uuid;
@@ -170,7 +172,12 @@ begin
     raise exception 'close_pitch_vote: pitch % not found', p_pitch_id;
   end if;
 
-  v_is_service := coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '') = 'service_role';
+  -- nullif: PostgREST leaves request.jwt.claims as the empty string on some
+  -- paths, and ''::jsonb raises instead of returning null — which would turn
+  -- a plain permission check into a confusing JSON syntax error.
+  v_is_service := coalesce(
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role',
+    '') = 'service_role';
   if not (v_is_service or is_fund_officer(p.fund_id)) then
     raise exception 'close_pitch_vote: only fund officers or the scheduler can close a vote';
   end if;
@@ -202,15 +209,28 @@ begin
       and m.status = 'active'
       and m.role <> 'viewer'));
 
+  -- Judge the vote by the rule frozen when it opened, the same moment
+  -- eligible_voters froze. threshold_pct is the marker that a rule was
+  -- captured: quorum_pct is legitimately null when the fund had none, so it
+  -- cannot tell the two cases apart on its own. Pitches opened before this
+  -- migration have neither and fall back to the fund's current settings.
+  if p.threshold_pct is not null then
+    v_threshold := p.threshold_pct;
+    v_quorum    := p.quorum_pct;
+  else
+    v_threshold := f.vote_pass_threshold_pct;
+    v_quorum    := f.vote_quorum_pct;
+  end if;
+
   if yes_ct + no_ct = 0 then
     v_pct := 0;
     v_status := 'failed';
   else
     v_pct := round(yes_ct::numeric / (yes_ct + no_ct) * 100, 2);
-    if f.vote_quorum_pct is not null and v_eligible > 0 then
-      v_quorum_ok := ((yes_ct + no_ct)::numeric / v_eligible * 100) >= f.vote_quorum_pct;
+    if v_quorum is not null and v_eligible > 0 then
+      v_quorum_ok := ((yes_ct + no_ct)::numeric / v_eligible * 100) >= v_quorum;
     end if;
-    v_status := case when v_pct >= f.vote_pass_threshold_pct and v_quorum_ok
+    v_status := case when v_pct >= v_threshold and v_quorum_ok
                      then 'passed' else 'failed' end;
   end if;
 
@@ -222,8 +242,8 @@ begin
          status          = v_status,
          -- Freeze the rule this vote was judged under, so changing fund
          -- settings later never rewrites how past results read (SPEC 12).
-         threshold_pct   = f.vote_pass_threshold_pct,
-         quorum_pct      = f.vote_quorum_pct,
+         threshold_pct   = v_threshold,
+         quorum_pct      = v_quorum,
          closed_by       = auth.uid(),
          closed_at       = now()
    where id = p_pitch_id
@@ -261,8 +281,8 @@ begin
     'status', v_status, 'result_pct', v_pct,
     'votes_yes', yes_ct, 'votes_no', no_ct,
     'eligible_voters', v_eligible, 'ticket_id', v_ticket_id,
-    'threshold_pct', f.vote_pass_threshold_pct,
-    'quorum_pct', f.vote_quorum_pct);
+    'threshold_pct', v_threshold,
+    'quorum_pct', v_quorum);
 end;
 $$;
 
