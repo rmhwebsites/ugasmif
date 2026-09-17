@@ -59,11 +59,34 @@ jobs:
       - name: Check the token is configured
         env:
           MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        # The diagnostic below prints secret NAMES only. Actions masks every
+        # secret value in logs, so toJSON(secrets) yields keys and ***.
         run: |
-          if [ -z "$MIRROR_TOKEN" ]; then
-            echo "::error::MIRROR_TOKEN is not set. Add it under Settings -> Secrets and variables -> Actions. The setup steps are in the comments at the top of .github/workflows/mirror.yml."
-            exit 1
+          if [ -n "$MIRROR_TOKEN" ]; then
+            echo "MIRROR_TOKEN found."
+            exit 0
           fi
+
+          echo "::error::MIRROR_TOKEN is empty in this job."
+          echo ""
+          echo "Secret names this job can see:"
+          echo '${{ toJSON(secrets) }}' | grep -oE '"[A-Za-z0-9_]+":' | tr -d '":' | sed 's/^/  - /' || echo "  (none)"
+          echo ""
+          echo "Repository VARIABLE names this job can see:"
+          echo '${{ toJSON(vars) }}' | grep -oE '"[A-Za-z0-9_]+":' | tr -d '":' | sed 's/^/  - /' || echo "  (none)"
+          echo ""
+          echo "If MIRROR_TOKEN is missing from the secrets list above, the usual causes are:"
+          echo "  1. It was added under the 'Variables' tab instead of 'Secrets'."
+          echo "     (If you see it in the variables list, that is what happened.)"
+          echo "  2. It was added as an ENVIRONMENT secret. Those only reach a job"
+          echo "     that declares 'environment:', which this one does not."
+          echo "     Re-add it as a REPOSITORY secret."
+          echo "  3. It was added to the wrong repository, or to the Dependabot tab."
+          echo "  4. The name has a typo or a trailing space."
+          echo ""
+          echo "Repository secrets live at:"
+          echo "  https://github.com/${{ github.repository }}/settings/secrets/actions"
+          exit 1
 
       - uses: actions/checkout@v4
         with:
