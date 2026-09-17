@@ -1,0 +1,22 @@
+# Supabase CLI project config.
+#
+# Deliberately minimal. `supabase init` writes ~415 lines of local-development
+# defaults, and recent CLI versions treat parts of this file as DECLARATIVE:
+# the GitHub integration can push what is written here onto the hosted
+# project. Committing the generated defaults would, among other things, set
+# auth.enable_signup = true — and SETUP.md turns public sign-up OFF on
+# purpose, because accounts come from the roster import and nobody should be
+# able to create their own.
+#
+# So this file carries the project id and the migration settings and nothing
+# else. Auth, storage and API settings stay where they are managed today, in
+# the Supabase dashboard. If you ever want them in version control, add them
+# one section at a time and check the dashboard after each deploy.
+
+project_id = "ucvmssmmnzltwzrdybko"
+
+[db.migrations]
+# Files in supabase/migrations/ are applied in filename order: 0001, 0002, …
+# Not the CLI's default timestamp format, and that is fine — the CLI reads the
+# leading digits as the version either way.
+schema_paths = []
