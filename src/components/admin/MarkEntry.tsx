@@ -142,12 +142,14 @@ export function CsvTool({
   const router = useRouter();
   const [csv, setCsv] = useState("");
   const [result, setResult] = useState<string | null>(null);
+  const [notes, setNotes] = useState<string[]>([]);
   const [errors, setErrors] = useState<{ row: number; message: string }[]>([]);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setResult(null);
+    setNotes([]);
     setErrors([]);
     setBusy(true);
     const res = await fetch(endpoint, {
@@ -163,6 +165,14 @@ export function CsvTool({
     }
     const count = Number(data?.[countKey] ?? 0);
     setResult(`${successVerb} ${count} ${count === 1 ? noun.replace(/s$/, "") : noun}.`);
+    // Routes explain the things a bare count cannot: rows skipped because
+    // they already existed, a feed that was unreachable. "Imported 0" with no
+    // reason is the confusing case this avoids.
+    setNotes(
+      (["note", "skippedNote", "benchmarkNote"] as const)
+        .map((k) => data?.[k])
+        .filter((v): v is string => typeof v === "string" && v !== "")
+    );
     setErrors(data.errors ?? []);
     setCsv("");
     router.refresh();
@@ -187,6 +197,11 @@ export function CsvTool({
         </Button>
         {result && <span className="text-sm text-muted">{result}</span>}
       </div>
+      {notes.map((note) => (
+        <p key={note} className="text-xs text-muted">
+          {note}
+        </p>
+      ))}
       {errors.length > 0 && (
         <ul className="space-y-0.5 text-xs text-loss">
           {errors.slice(0, 10).map((e) => (
