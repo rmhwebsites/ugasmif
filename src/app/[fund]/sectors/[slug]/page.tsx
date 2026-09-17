@@ -8,12 +8,25 @@ import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { valueFund } from "@/lib/valuation";
 import { can, inSector, isOfficer } from "@/lib/permissions";
+import {
+  groupStats,
+  positionContributions,
+  weightsWithinGroup,
+} from "@/lib/analysis";
 import { HoldingsTable } from "@/components/holdings/HoldingsTable";
 import { ValueChart } from "@/components/charts/ValueChart";
 import { PitchCard, type PitchListItem } from "@/components/pitch/PitchCard";
 import { Badge } from "@/components/ui/Badge";
+import { Card, CardHeader, StatCard } from "@/components/ui/Card";
+import { ContributionBars } from "@/components/analysis/ContributionBars";
+import { SectorWeights } from "@/components/analysis/SectorBreakdown";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { formatPercent } from "@/lib/format";
+import {
+  formatCurrencyWhole,
+  formatPercent,
+  formatSignedCurrency,
+  formatSignedPercent,
+} from "@/lib/format";
 import type {
   ChartPoint,
   FundSnapshot,
@@ -86,6 +99,13 @@ export default async function SectorWorkspacePage({
   const sectorHoldings = valuation.holdings.filter(
     (h) => h.holding.sector_id === sector.id
   );
+  // What the sector's weight is actually made of, and which of its positions
+  // are carrying it. Both come from the live valuation, so they work before
+  // the first nightly snapshot exists.
+  const stats = groupStats(sectorHoldings);
+  const withinSector = weightsWithinGroup(sectorHoldings);
+  const sectorContributions = positionContributions(sectorHoldings);
+
   const canPitch =
     can(ctx, "draft_pitch", { sectorId: sector.id }) &&
     (inSector(ctx, sector.id) || isOfficer(ctx) || ctx.isAppAdmin);
@@ -199,6 +219,77 @@ export default async function SectorWorkspacePage({
           />
         )}
       </section>
+
+      {/* Breakdown */}
+      {sectorHoldings.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold sm:text-lg">Breakdown</h2>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+            <StatCard
+              label="Sector value"
+              value={formatCurrencyWhole(stats.marketValue)}
+              sub={`${stats.positions} position${stats.positions === 1 ? "" : "s"}`}
+            />
+            <StatCard
+              label="Unrealized gain"
+              value={
+                <span className={stats.unrealizedGain >= 0 ? "text-gain" : "text-loss"}>
+                  {formatSignedCurrency(stats.unrealizedGain)}
+                </span>
+              }
+              sub={
+                stats.returnPct === null
+                  ? "No cost basis"
+                  : `${formatSignedPercent(stats.returnPct)} on cost`
+              }
+            />
+            <StatCard
+              label="Day change"
+              value={
+                stats.dayChange === null ? (
+                  "—"
+                ) : (
+                  <span className={stats.dayChange >= 0 ? "text-gain" : "text-loss"}>
+                    {formatSignedCurrency(stats.dayChange)}
+                  </span>
+                )
+              }
+              sub={stats.dayChange === null ? "Nothing priced today" : "Across the sector"}
+            />
+            <StatCard
+              label="Largest position"
+              value={stats.topLabel ?? "—"}
+              sub={
+                stats.topWeightPct === null
+                  ? ""
+                  : `${formatPercent(stats.topWeightPct)} of the sector`
+              }
+            />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+            <Card className="overflow-hidden">
+              <CardHeader
+                title="Weight within the sector"
+                action={<span className="text-xs text-muted">Live valuation</span>}
+              />
+              <SectorWeights rows={withinSector} fund={ctx.fund.slug} />
+            </Card>
+            <Card className="overflow-hidden">
+              <CardHeader
+                title="Contribution to unrealized gain"
+                action={<span className="text-xs text-muted">Biggest movers first</span>}
+              />
+              <ContributionBars
+                rows={sectorContributions}
+                fund={ctx.fund.slug}
+                limit={6}
+              />
+            </Card>
+          </div>
+        </section>
+      )}
 
       {/* Weight vs target / benchmark over time */}
       <section className="space-y-3">

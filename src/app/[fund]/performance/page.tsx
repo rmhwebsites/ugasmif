@@ -9,6 +9,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAuthState, getFundContext } from "@/lib/fund";
 import { valueFund } from "@/lib/valuation";
+import { concentrationCurve, positionContributions } from "@/lib/analysis";
 import {
   benchmarkReturnSeries,
   dailyReturnSeries,
@@ -28,6 +29,8 @@ import { ValueChart } from "@/components/charts/ValueChart";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AlumniNotice } from "@/components/ui/AlumniNotice";
+import { ContributionBars } from "@/components/analysis/ContributionBars";
+import { ConcentrationChart } from "@/components/analysis/ConcentrationChart";
 import {
   RatingBucketTable,
   SectorAttributionTable,
@@ -289,15 +292,58 @@ export default async function PerformancePage({
     </div>
   );
 
+  const byWeight = [...v.holdings].sort((a, b) => b.weightPct - a.weightPct);
+  const sumWeight = (n: number) =>
+    byWeight.slice(0, n).reduce((sum, h) => sum + h.weightPct, 0);
+  const top5Weight = sumWeight(5);
+  const top10Weight = sumWeight(10);
+
+  // Analysis that needs no snapshot history. Returns, drawdown and attribution
+  // all chain off fund_snapshots and say nothing until the nightly cron has run
+  // twice; these are computed from what the fund holds right now, so they are
+  // useful on day one and render in both branches below.
+  const contributions = positionContributions(v.holdings);
+  const concentration = concentrationCurve(v.holdings, 20);
+  const liveAnalysis = (
+    <>
+      <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+        <Card className="overflow-hidden">
+          <CardHeader
+            title="Contribution to unrealized gain"
+            action={
+              <span className="text-xs text-muted">Biggest movers first</span>
+            }
+          />
+          <ContributionBars rows={contributions} fund={fund.slug} limit={8} />
+        </Card>
+        <Card>
+          <CardHeader
+            title="Concentration"
+            action={
+              <span className="text-xs tabular-nums text-muted">
+                Top 5 {formatPercent(top5Weight)} · top 10{" "}
+                {formatPercent(top10Weight)}
+              </span>
+            }
+          />
+          <div className="p-4 sm:p-6">
+            <ConcentrationChart points={concentration} fund={fund.slug} />
+          </div>
+        </Card>
+      </div>
+      <SectorWeightsCard v={v} />
+    </>
+  );
+
   if (snapshots.length < 2) {
     return (
       <div className="space-y-4">
         {header}
         <EmptyState
-          title="Not enough history yet"
-          hint="Performance charts appear after the first two nightly snapshots."
+          title="Return history starts after tonight"
+          hint="Returns, drawdown and attribution are computed from the nightly snapshots, so they appear once two have been recorded. Everything below is live from the current portfolio."
         />
-        <SectorWeightsCard v={v} />
+        {liveAnalysis}
       </div>
     );
   }
@@ -308,12 +354,6 @@ export default async function PerformancePage({
   const drawdown = drawdownSeries(growth);
   const monthly = monthlyReturnTable(snapshots, flows);
   const rm = riskMetrics(snapshots, flows);
-  const byWeight = [...v.holdings].sort((a, b) => b.weightPct - a.weightPct);
-  const sumWeight = (n: number) =>
-    byWeight.slice(0, n).reduce((sum, h) => sum + h.weightPct, 0);
-  const top5Weight = sumWeight(5);
-  const top10Weight = sumWeight(10);
-
   // Sector attribution for the window in ?attr= (SPEC 11.2). valueFund()
   // already resolved each holding's sector, so the map comes free.
   const attrPeriod = attr && ATTRIBUTION_PERIODS.includes(attr) ? attr : "YTD";
@@ -587,7 +627,7 @@ export default async function PerformancePage({
 
       {isFixedIncome && <RatingBucketCard v={v} />}
 
-      <SectorWeightsCard v={v} />
+      {liveAnalysis}
     </div>
   );
 }
