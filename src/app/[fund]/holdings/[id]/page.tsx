@@ -24,6 +24,7 @@ import { getKeyStats } from "@/lib/yahoo";
 import { couponSchedule } from "@/lib/bonds/accrued";
 import { interpolateYield } from "@/lib/bonds/treasury";
 import { StockChart } from "@/components/holdings/StockChart";
+import { KeyStatsCard } from "@/components/holdings/KeyStats";
 import { PriceSourceBadge } from "@/components/holdings/PriceSourceBadge";
 import { ValueChart } from "@/components/charts/ValueChart";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
@@ -280,31 +281,6 @@ export default async function HoldingDetailPage({
     markChartData.length < 2 ||
     markChartData[markChartData.length - 1].value >= markChartData[0].value;
 
-  const statNum = (key: string): number | null => {
-    const value = keyStats[key];
-    return typeof value === "number" && Number.isFinite(value) ? value : null;
-  };
-  const compact = (value: number | null): string =>
-    value === null
-      ? "—"
-      : new Intl.NumberFormat("en-US", {
-          notation: "compact",
-          maximumFractionDigits: 1,
-        }).format(value);
-  const marketCap = statNum("marketCap");
-  const avgVolume = statNum("averageVolume");
-  const keyStatItems: { label: string; value: string }[] = [
-    { label: "Market Cap", value: marketCap === null ? "—" : `$${compact(marketCap)}` },
-    { label: "P/E (TTM)", value: formatNumber(statNum("trailingPE"), 1) },
-    { label: "Forward P/E", value: formatNumber(statNum("forwardPE"), 1) },
-    { label: "Dividend Yield", value: formatPercent(statNum("dividendYield"), 2) },
-    { label: "Beta", value: formatNumber(statNum("beta"), 2) },
-    { label: "52W High", value: formatCurrency(statNum("fiftyTwoWeekHigh")) },
-    { label: "52W Low", value: formatCurrency(statNum("fiftyTwoWeekLow")) },
-    { label: "Avg Volume", value: compact(avgVolume) },
-  ];
-  const hasKeyStats = keyStatItems.some((item) => item.value !== "—");
-
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -438,28 +414,7 @@ export default async function HoldingDetailPage({
           <Card className="p-4 sm:p-6">
             <StockChart symbol={h.symbol} fund={ctx.fund.slug} />
           </Card>
-          <Card className="overflow-hidden">
-            <CardHeader title="Key Stats" />
-            {hasKeyStats ? (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-4 p-4 sm:grid-cols-4 sm:p-6">
-                {keyStatItems.map((item) => (
-                  <div key={item.label}>
-                    <p className="text-[11px] uppercase tracking-wider text-muted">
-                      {item.label}
-                    </p>
-                    <p className="mt-0.5 text-sm font-medium tabular-nums sm:text-base">
-                      {item.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="p-6 text-sm text-muted">
-                Key stats are unavailable right now — Yahoo Finance did not
-                return data for {h.symbol}. Refresh in a minute.
-              </p>
-            )}
-          </Card>
+          <KeyStatsCard stats={keyStats} symbol={h.symbol} />
         </>
       )}
 

@@ -136,7 +136,7 @@ export function CurveChart(props: { series: { label: string; points: { tenorYear
 - `GET /api/market/search?q=` → `{ results: [...] }` (pitch editor, add holding)
 - `GET /api/market/rates` → `{ rates: [...] }`
 - `GET /api/[fund]/portfolio/history?period=` → `{ points: ChartPoint[]; benchmark: ChartPoint[] }` (from fund_snapshots)
-- Pitches: `POST /api/[fund]/pitches`, `PATCH/DELETE /api/[fund]/pitches/[id]`, `POST /api/[fund]/pitches/[id]/submit|schedule|open-vote|close-vote|withdraw`, `POST /api/[fund]/pitches/[id]/files` (FormData upload to bucket `pitch-files`)
+- Pitches: `POST /api/[fund]/pitches`, `PATCH/DELETE /api/[fund]/pitches/[id]`, `POST /api/[fund]/pitches/[id]/submit|schedule|open-vote|close-vote|withdraw`, `POST /api/[fund]/pitches/[id]/files` (FormData upload to bucket `pitch-files`), `GET /api/[fund]/pitches/[id]/files/[fileId]` (302 to a freshly signed storage URL; the inline PDF viewer's `src`)
 - Votes: `POST /api/[fund]/pitches/[id]/vote` `{ choice, comment? }`
 - Tickets: `POST /api/[fund]/tickets`, `POST /api/[fund]/tickets/[id]/execute`, `POST /api/[fund]/tickets/[id]/cancel`
 - Holdings admin: `POST/PATCH /api/[fund]/holdings(/[id])`, `POST /api/[fund]/marks` (single), `POST /api/[fund]/marks/csv`, `POST /api/[fund]/cash-movements`

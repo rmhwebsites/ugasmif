@@ -9,15 +9,13 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import {
   ArrowLeft,
-  FileSpreadsheet,
-  FileText,
   Link2,
-  Paperclip,
   Pencil,
   Receipt,
 } from "lucide-react";
 import { getAuthState, getFundContext } from "@/lib/fund";
 import { voteRule } from "@/lib/votes";
+import { getKeyStats, getQuote } from "@/lib/yahoo";
 import {
   can,
   inSector,
@@ -30,6 +28,10 @@ import { Badge, PitchStatusBadge } from "@/components/ui/Badge";
 import { VotePanel } from "@/components/pitch/VotePanel";
 import { ScheduleControls } from "@/components/pitch/ScheduleControls";
 import { pitchActionLine } from "@/components/pitch/PitchCard";
+import { PitchFiles } from "@/components/pitch/PitchFiles";
+import { StockChart } from "@/components/holdings/StockChart";
+import { KeyStatsCard } from "@/components/holdings/KeyStats";
+import { SecurityLogo } from "@/components/holdings/SecurityLogo";
 import type { TallyVoter } from "@/components/pitch/TallyCard";
 import {
   easternDateString,
@@ -37,6 +39,8 @@ import {
   formatDate,
   formatDateTime,
   formatPercent,
+  formatSignedCurrency,
+  formatSignedPercent,
 } from "@/lib/format";
 import type {
   Meeting,
@@ -49,6 +53,15 @@ import type {
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Individual bonds have no Yahoo symbol to chart; a pitch for one carries a
+// CUSIP instead. Everything else with a symbol gets the price chart.
+const BOND_TYPES = new Set([
+  "treasury",
+  "corporate",
+  "agency_mbs",
+  "municipal",
+]);
 
 // ── Tiny markdown → JSX (headings, bold, italics, code, lists, quotes) ──────
 
@@ -221,6 +234,14 @@ export default async function PitchDetailPage({
     cusip?: string;
   };
 
+  // Equity/ETF pitches get a live quote, price chart and key stats. A pitch
+  // for an individual bond has no Yahoo symbol to look up.
+  const rawSymbol = (pitch.symbol ?? "").trim();
+  const chartSymbol =
+    rawSymbol !== "" && !BOND_TYPES.has(pitch.instrument_type ?? "")
+      ? rawSymbol.toUpperCase()
+      : null;
+
   const canViewIndividual = can(ctx, "view_individual_votes");
   const closedOrDone = ["passed", "failed", "executed"].includes(pitch.status);
 
@@ -232,6 +253,8 @@ export default async function PitchDetailPage({
     ticketRes,
     meetingsRes,
     ballotCountRes,
+    quote,
+    keyStats,
   ] = await Promise.all([
       supabase
         .from("pitch_files")
@@ -279,17 +302,33 @@ export default async function PitchDetailPage({
       pitch.status === "voting" && !canViewIndividual
         ? supabase.rpc("pitch_vote_count", { p_pitch_id: pitch.id })
         : Promise.resolve({ data: null }),
+      // Yahoo is outside our control, so a failure here degrades the market
+      // card rather than taking the pitch page down with it.
+      chartSymbol
+        ? getQuote(chartSymbol).catch(() => null)
+        : Promise.resolve(null),
+      chartSymbol
+        ? getKeyStats(chartSymbol).catch(() => ({}))
+        : Promise.resolve({}),
     ]);
 
-  const files = (filesRes.data as PitchFile[] | null) ?? [];
-  const signedFiles = await Promise.all(
-    files.map(async (f) => {
-      const { data } = await supabase.storage
-        .from("pitch-files")
-        .createSignedUrl(f.storage_path, 3600);
-      return { ...f, url: data?.signedUrl ?? null };
-    })
-  );
+  // Only what the viewer needs — it links through our own route, which signs
+  // a storage URL per request, so no storage path reaches the browser.
+  const files = ((filesRes.data as PitchFile[] | null) ?? []).map((f) => ({
+    id: f.id,
+    kind: f.kind,
+    file_name: f.file_name,
+  }));
+
+  // Distance from the last price to the pitch's target. Signed rather than
+  // "upside" because a trim or sell pitch targets a price below the market.
+  const lastPrice = quote?.price ?? null;
+  const targetPrice =
+    pitch.target_price === null ? null : Number(pitch.target_price);
+  const toTargetPct =
+    lastPrice !== null && lastPrice > 0 && targetPrice !== null
+      ? ((targetPrice - lastPrice) / lastPrice) * 100
+      : null;
 
   const voteRows = (votesRes.data as unknown as VoteRow[] | null) ?? [];
   const myVoteRow = voteRows.find((v) => v.voter_id === user?.id) ?? null;
@@ -395,6 +434,87 @@ export default async function PitchDetailPage({
       <div className="grid gap-4 lg:grid-cols-3">
         {/* ── Main column ────────────────────────────────────────────── */}
         <div className="space-y-4 lg:col-span-2">
+          {chartSymbol && (
+            <Card className="overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-card-border px-4 py-3 sm:px-6 sm:py-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <SecurityLogo
+                    symbol={chartSymbol}
+                    name={pitch.instrument_name}
+                    size="md"
+                  />
+                  <div className="min-w-0">
+                    <p className="font-semibold leading-tight">{chartSymbol}</p>
+                    <p className="truncate text-xs text-muted">
+                      {quote?.name ?? pitch.instrument_name ?? "Live market data"}
+                    </p>
+                  </div>
+                </div>
+                {quote && (
+                  <div className="text-right">
+                    <p className="text-lg font-semibold tabular-nums sm:text-xl">
+                      {formatCurrency(quote.price)}
+                    </p>
+                    <p
+                      className={`text-xs font-medium tabular-nums ${
+                        (quote.change ?? 0) >= 0 ? "text-gain" : "text-loss"
+                      }`}
+                    >
+                      {formatSignedCurrency(quote.change)} (
+                      {formatSignedPercent(quote.changePercent)})
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {targetPrice !== null && (
+                <dl className="grid grid-cols-2 divide-x divide-card-border border-b border-card-border text-center">
+                  <div className="px-2 py-3">
+                    <dt className="text-[11px] uppercase tracking-wider text-muted">
+                      Target price
+                    </dt>
+                    <dd className="mt-0.5 text-sm font-medium tabular-nums">
+                      {formatCurrency(targetPrice)}
+                    </dd>
+                  </div>
+                  <div className="px-2 py-3">
+                    <dt className="text-[11px] uppercase tracking-wider text-muted">
+                      To target
+                    </dt>
+                    <dd
+                      className={`mt-0.5 text-sm font-medium tabular-nums ${
+                        toTargetPct === null
+                          ? ""
+                          : toTargetPct >= 0
+                            ? "text-gain"
+                            : "text-loss"
+                      }`}
+                    >
+                      {toTargetPct === null
+                        ? "—"
+                        : formatSignedPercent(toTargetPct)}
+                    </dd>
+                  </div>
+                </dl>
+              )}
+
+              <div className="p-4 sm:p-6">
+                <StockChart symbol={chartSymbol} fund={ctx.fund.slug} />
+              </div>
+
+              {quote?.stale && (
+                <p className="border-t border-card-border px-4 py-2 text-xs text-muted sm:px-6">
+                  Live quote unavailable — showing the last stored price from{" "}
+                  {formatDateTime(quote.asOf)}.
+                </p>
+              )}
+            </Card>
+          )}
+
+          {chartSymbol && (
+            <KeyStatsCard stats={keyStats} symbol={chartSymbol} />
+          )}
+
           <Card>
             <CardHeader title="Thesis" />
             <div className="space-y-2 p-4 sm:p-6">
@@ -414,40 +534,8 @@ export default async function PitchDetailPage({
           <Card>
             <CardHeader title="Files" />
             <div className="p-4 sm:p-6">
-              {signedFiles.length > 0 ? (
-                <ul className="space-y-2">
-                  {signedFiles.map((f) => (
-                    <li key={f.id}>
-                      {f.url ? (
-                        <a
-                          href={f.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-2 rounded-lg bg-highlight px-3 py-2 text-sm transition-colors hover:bg-accent-soft"
-                        >
-                          {f.kind === "deck" ? (
-                            <FileText className="h-4 w-4 shrink-0 text-accent" />
-                          ) : f.kind === "model" ? (
-                            <FileSpreadsheet className="h-4 w-4 shrink-0 text-accent" />
-                          ) : (
-                            <Paperclip className="h-4 w-4 shrink-0 text-accent" />
-                          )}
-                          <span className="min-w-0 flex-1 truncate font-medium">
-                            {f.file_name}
-                          </span>
-                          <span className="text-[10px] uppercase tracking-wider text-muted">
-                            {f.kind}
-                          </span>
-                        </a>
-                      ) : (
-                        <span className="flex items-center gap-2 px-3 py-2 text-sm text-muted">
-                          <Paperclip className="h-4 w-4" /> {f.file_name} (link
-                          unavailable)
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+              {files.length > 0 ? (
+                <PitchFiles files={files} fund={slug} pitchId={pitch.id} />
               ) : (
                 <p className="text-sm text-muted">
                   No deck or model attached yet.{" "}
