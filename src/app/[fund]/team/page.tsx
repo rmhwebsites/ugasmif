@@ -1,13 +1,17 @@
 // /[fund]/team — roster grouped by sector with roles; past years selectable
-// (SPEC 11.2).
+// (SPEC 11.2). Laid out as a portrait grid: a roster is people, and a wall of
+// names in rows reads like a spreadsheet. Members who haven't uploaded a photo
+// get a generated stand-in (see components/ui/Avatar).
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { roleLabel, OFFICER_ROLES } from "@/lib/permissions";
 import { Badge } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
 import type {
   AcademicYear,
   Membership,
@@ -18,8 +22,39 @@ import type {
 export const metadata: Metadata = { title: "Team" };
 
 type MemberRow = Membership & {
-  profiles: Pick<Profile, "full_name" | "email"> | null;
+  profiles: Pick<Profile, "full_name" | "email" | "avatar_url"> | null;
 };
+
+/** One person in the roster grid. */
+function MemberTile({
+  member,
+  subtitle,
+}: {
+  member: MemberRow;
+  subtitle: ReactNode;
+}) {
+  const name = member.profiles?.full_name ?? "Unnamed member";
+  return (
+    <li className="flex flex-col items-center rounded-xl bg-highlight p-3 text-center transition-colors hover:bg-accent-soft sm:p-4">
+      <Avatar
+        src={member.profiles?.avatar_url}
+        seed={member.user_id}
+        name={name}
+        size="lg"
+        className={`sm:h-20 sm:w-20 ${
+          member.is_sector_leader ? "ring-2 ring-accent" : ""
+        }`}
+      />
+      <p className="mt-2 text-sm font-medium leading-snug text-balance">
+        {name}
+      </p>
+      <div className="mt-1 text-xs leading-snug">{subtitle}</div>
+    </li>
+  );
+}
+
+const GRID =
+  "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5";
 
 export default async function TeamPage({
   params,
@@ -46,7 +81,7 @@ export default async function TeamPage({
   const [membersRes, sectorsRes] = await Promise.all([
     supabase
       .from("memberships")
-      .select("*, profiles(full_name, email)")
+      .select("*, profiles(full_name, email, avatar_url)")
       .eq("fund_id", ctx.fund.id)
       .eq("academic_year_id", selectedYear.id)
       .order("created_at"),
@@ -107,22 +142,23 @@ export default async function TeamPage({
             <h2 className="mb-3 text-base font-semibold sm:text-lg">
               Officers
             </h2>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {officers.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center justify-between rounded-lg bg-highlight px-3 py-2 text-sm"
-                >
-                  <span>{m.profiles?.full_name ?? "—"}</span>
-                  <span className="text-xs text-accent">
-                    {roleLabel(m.role, m.title_override)}
-                  </span>
-                </li>
-              ))}
-              {officers.length === 0 && (
-                <li className="text-sm text-muted">No officers recorded.</li>
-              )}
-            </ul>
+            {officers.length === 0 ? (
+              <p className="text-sm text-muted">No officers recorded.</p>
+            ) : (
+              <ul className={GRID}>
+                {officers.map((m) => (
+                  <MemberTile
+                    key={m.id}
+                    member={m}
+                    subtitle={
+                      <span className="text-accent">
+                        {roleLabel(m.role, m.title_override)}
+                      </span>
+                    }
+                  />
+                ))}
+              </ul>
+            )}
           </section>
 
           {/* Sector groups */}
@@ -144,21 +180,21 @@ export default async function TeamPage({
                     <Badge tone="info">strategy team</Badge>
                   )}
                 </div>
-                <ul className="grid gap-2 sm:grid-cols-2">
+                <ul className={GRID}>
                   {group.map((m) => (
-                    <li
+                    <MemberTile
                       key={m.id}
-                      className="flex items-center justify-between rounded-lg bg-highlight px-3 py-2 text-sm"
-                    >
-                      <span>{m.profiles?.full_name ?? "—"}</span>
-                      {m.is_sector_leader ? (
-                        <Badge tone="accent">leader</Badge>
-                      ) : (
-                        <span className="text-xs text-muted">
-                          {roleLabel(m.role, m.title_override)}
-                        </span>
-                      )}
-                    </li>
+                      member={m}
+                      subtitle={
+                        m.is_sector_leader ? (
+                          <Badge tone="accent">leader</Badge>
+                        ) : (
+                          <span className="text-muted">
+                            {roleLabel(m.role, m.title_override)}
+                          </span>
+                        )
+                      }
+                    />
                   ))}
                 </ul>
               </section>
