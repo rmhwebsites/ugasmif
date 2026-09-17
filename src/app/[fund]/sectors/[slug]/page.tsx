@@ -7,7 +7,7 @@ import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { valueFund } from "@/lib/valuation";
-import { can, inSector, isOfficer } from "@/lib/permissions";
+import { can, inSector, isOfficer, roleLabel } from "@/lib/permissions";
 import {
   groupStats,
   positionContributions,
@@ -16,7 +16,7 @@ import {
 import { HoldingsTable } from "@/components/holdings/HoldingsTable";
 import { ValueChart } from "@/components/charts/ValueChart";
 import { PitchCard, type PitchListItem } from "@/components/pitch/PitchCard";
-import { Badge } from "@/components/ui/Badge";
+import { MemberCarousel } from "@/components/team/MemberCarousel";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { ContributionBars } from "@/components/analysis/ContributionBars";
 import { SectorWeights } from "@/components/analysis/SectorBreakdown";
@@ -39,7 +39,7 @@ import type {
 export const metadata: Metadata = { title: "Sector" };
 
 type MemberRow = Membership & {
-  profiles: Pick<Profile, "full_name" | "email"> | null;
+  profiles: Pick<Profile, "full_name" | "email" | "avatar_url"> | null;
 };
 
 type SnapshotRow = Pick<FundSnapshot, "snapshot_date" | "detail">;
@@ -74,7 +74,7 @@ export default async function SectorWorkspacePage({
     valueFund(supabase, ctx.fund.id),
     supabase
       .from("memberships")
-      .select("*, profiles(full_name, email)")
+      .select("*, profiles(full_name, email, avatar_url)")
       .eq("fund_id", ctx.fund.id)
       .eq("academic_year_id", ctx.currentYear.id)
       .eq("sector_id", sector.id)
@@ -189,17 +189,16 @@ export default async function SectorWorkspacePage({
             the roster page.
           </p>
         ) : (
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {members.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between rounded-lg bg-highlight px-3 py-2 text-sm"
-              >
-                <span>{m.profiles?.full_name ?? "—"}</span>
-                {m.is_sector_leader && <Badge tone="accent">leader</Badge>}
-              </li>
-            ))}
-          </ul>
+          <MemberCarousel
+            members={members.map((m) => ({
+              id: m.id,
+              name: m.profiles?.full_name ?? "Unnamed member",
+              role: roleLabel(m.role, m.title_override),
+              avatarUrl: m.profiles?.avatar_url ?? null,
+              isLeader: m.is_sector_leader,
+            }))}
+            label={`${sector.name} team`}
+          />
         )}
       </section>
 

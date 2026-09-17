@@ -1,17 +1,19 @@
 // /[fund]/team — roster grouped by sector with roles; past years selectable
-// (SPEC 11.2). Laid out as a portrait grid: a roster is people, and a wall of
-// names in rows reads like a spreadsheet. Members who haven't uploaded a photo
-// show the default silhouette.
+// (SPEC 11.2). A roster is people, so each group is a swipeable row of cards
+// (picture, name, role) rather than a wall of names. Members who haven't
+// uploaded a photo show the default silhouette.
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
 import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { roleLabel, OFFICER_ROLES } from "@/lib/permissions";
 import { Badge } from "@/components/ui/Badge";
-import { Avatar } from "@/components/ui/Avatar";
+import {
+  MemberCarousel,
+  type TeamMember,
+} from "@/components/team/MemberCarousel";
 import type {
   AcademicYear,
   Membership,
@@ -25,34 +27,16 @@ type MemberRow = Membership & {
   profiles: Pick<Profile, "full_name" | "email" | "avatar_url"> | null;
 };
 
-/** One person in the roster grid. */
-function MemberTile({
-  member,
-  subtitle,
-}: {
-  member: MemberRow;
-  subtitle: ReactNode;
-}) {
-  const name = member.profiles?.full_name ?? "Unnamed member";
-  return (
-    <li className="flex flex-col items-center rounded-xl bg-highlight p-3 text-center transition-colors hover:bg-accent-soft sm:p-4">
-      <Avatar
-        src={member.profiles?.avatar_url}
-        size="lg"
-        className={`sm:h-20 sm:w-20 ${
-          member.is_sector_leader ? "ring-2 ring-accent" : ""
-        }`}
-      />
-      <p className="mt-2 text-sm font-medium leading-snug text-balance">
-        {name}
-      </p>
-      <div className="mt-1 text-xs leading-snug">{subtitle}</div>
-    </li>
-  );
+/** Rows out of Supabase, into what the carousel renders. */
+function toCards(rows: MemberRow[]): TeamMember[] {
+  return rows.map((m) => ({
+    id: m.id,
+    name: m.profiles?.full_name ?? "Unnamed member",
+    role: roleLabel(m.role, m.title_override),
+    avatarUrl: m.profiles?.avatar_url ?? null,
+    isLeader: m.is_sector_leader,
+  }));
 }
-
-const GRID =
-  "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5";
 
 export default async function TeamPage({
   params,
@@ -143,19 +127,7 @@ export default async function TeamPage({
             {officers.length === 0 ? (
               <p className="text-sm text-muted">No officers recorded.</p>
             ) : (
-              <ul className={GRID}>
-                {officers.map((m) => (
-                  <MemberTile
-                    key={m.id}
-                    member={m}
-                    subtitle={
-                      <span className="text-accent">
-                        {roleLabel(m.role, m.title_override)}
-                      </span>
-                    }
-                  />
-                ))}
-              </ul>
+              <MemberCarousel members={toCards(officers)} label="Officers" />
             )}
           </section>
 
@@ -178,23 +150,10 @@ export default async function TeamPage({
                     <Badge tone="info">strategy team</Badge>
                   )}
                 </div>
-                <ul className={GRID}>
-                  {group.map((m) => (
-                    <MemberTile
-                      key={m.id}
-                      member={m}
-                      subtitle={
-                        m.is_sector_leader ? (
-                          <Badge tone="accent">leader</Badge>
-                        ) : (
-                          <span className="text-muted">
-                            {roleLabel(m.role, m.title_override)}
-                          </span>
-                        )
-                      }
-                    />
-                  ))}
-                </ul>
+                <MemberCarousel
+                  members={toCards(group)}
+                  label={`${sector.name} team`}
+                />
               </section>
             );
           })}

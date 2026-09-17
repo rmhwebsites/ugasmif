@@ -3,7 +3,6 @@
 // Collapsible sidebar (spec 11.4). The fund header always states which hat
 // the user wears: "Arch Bond Fund — Portfolio Manager" (spec Section 10).
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,8 +12,8 @@ import {
   FileText,
   LayoutDashboard,
   LineChart,
+  LogOut,
   Megaphone,
-  Menu,
   PieChart,
   Settings,
   ShieldCheck,
@@ -24,6 +23,8 @@ import {
   X,
 } from "lucide-react";
 import { SmifLogo } from "@/components/icons/SmifLogo";
+import { LogoutButton } from "@/components/auth/LogoutButton";
+import { useMobileNav } from "@/components/layout/MobileNav";
 import type { FundSlug } from "@/types/domain";
 
 interface NavItem {
@@ -63,7 +64,7 @@ export function Sidebar({
   showAppAdmin: boolean;
 }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const { open, setOpen } = useMobileNav();
 
   const items: NavItem[] = [
     { href: `/${fund}`, label: "Dashboard", icon: "dashboard" },
@@ -162,22 +163,22 @@ export function Sidebar({
           <Settings className="h-4 w-4 shrink-0" />
           Profile
         </Link>
+        {/* On a phone the header has no room for it, so it lives here. */}
+        <div className="mt-1 lg:hidden">
+          <LogoutButton
+            variant="ghost"
+            className="w-full justify-start gap-3 px-3 py-2 font-normal"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            Sign out
+          </LogoutButton>
+        </div>
       </div>
     </nav>
   );
 
   return (
     <>
-      {/* Mobile toggle */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="fixed top-3 left-3 z-40 cursor-pointer rounded-lg border border-card-border bg-card-solid p-2 lg:hidden"
-        aria-label="Open navigation"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
       {/* Mobile drawer */}
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden">

@@ -1,10 +1,19 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 
-export function LogoutButton() {
+export function LogoutButton({
+  className = "",
+  variant = "secondary",
+  children = "Sign out",
+}: {
+  className?: string;
+  variant?: "primary" | "secondary" | "danger" | "ghost";
+  children?: ReactNode;
+} = {}) {
   const router = useRouter();
 
   async function handleLogout() {
@@ -15,8 +24,8 @@ export function LogoutButton() {
   }
 
   return (
-    <Button variant="secondary" onClick={handleLogout}>
-      Sign out
+    <Button variant={variant} onClick={handleLogout} className={className}>
+      {children}
     </Button>
   );
 }

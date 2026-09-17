@@ -6,6 +6,10 @@ import { notFound, redirect } from "next/navigation";
 import { getAccessibleFunds, getAuthState, getFundContext } from "@/lib/fund";
 import { isOfficer, roleLabel } from "@/lib/permissions";
 import { Sidebar } from "@/components/layout/Sidebar";
+import {
+  MobileNavProvider,
+  MobileNavToggle,
+} from "@/components/layout/MobileNav";
 import { FundSwitcher } from "@/components/layout/FundSwitcher";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { FundCookie } from "@/components/layout/FundCookie";
@@ -43,7 +47,8 @@ export default async function FundLayout({
       }`;
 
   return (
-    <div data-fund={ctx.fund.slug} className="flex min-h-screen">
+    <MobileNavProvider>
+      <div data-fund={ctx.fund.slug} className="flex min-h-screen">
       <FundCookie fund={ctx.fund.slug} />
       <Sidebar
         fund={ctx.fund.slug}
@@ -54,15 +59,22 @@ export default async function FundLayout({
       />
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 flex items-center justify-end gap-2 border-b border-card-border bg-sticky px-4 py-2.5 backdrop-blur-xl sm:px-6">
+          <MobileNavToggle />
           <FundSwitcher
             current={ctx.fund.slug}
             accessible={accessible.map((f) => f.slug as FundSlug)}
           />
           <ThemeToggle />
-          <LogoutButton />
+          {/* Wrapped, not class-toggled: Button's own inline-flex would
+              fight a `hidden` on the same element. Below lg the drawer
+              carries Sign out, which keeps room for the Menu button. */}
+          <div className="hidden lg:block">
+            <LogoutButton />
+          </div>
         </header>
         <main className="mx-auto max-w-6xl p-4 sm:p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </MobileNavProvider>
   );
 }
