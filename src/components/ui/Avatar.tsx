@@ -1,52 +1,42 @@
-// A member's picture. Their upload when they have one, otherwise a generated
-// stand-in from /api/avatar/[seed] so a roster grid is never a wall of empty
-// circles. Initials are the last resort, for a row with no id to seed from.
+// A member's picture: their upload when they have one, otherwise the default
+// grey silhouette. Everyone shares the same placeholder on purpose — it reads
+// as "no photo yet" rather than as a thing someone chose.
 //
 // Decorative by design: every place this is used prints the name next to it,
 // so alt text would just be read twice.
 
 const SIZES = {
-  sm: "h-8 w-8 text-xs",
-  md: "h-10 w-10 text-sm",
-  lg: "h-16 w-16 text-base",
-  xl: "h-20 w-20 text-lg",
+  sm: "h-8 w-8",
+  md: "h-10 w-10",
+  lg: "h-16 w-16",
+  xl: "h-20 w-20",
 } as const;
-
-export function initialsOf(name: string | null | undefined): string {
-  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 export function Avatar({
   src,
-  seed,
-  name,
   size = "md",
   className = "",
 }: {
   src?: string | null;
-  seed?: string | null;
-  name?: string | null;
   size?: keyof typeof SIZES;
   className?: string;
 }) {
-  const box = `${SIZES[size]} shrink-0 rounded-full bg-highlight ${className}`;
-  const url =
-    src && src.trim() !== ""
-      ? src.trim()
-      : seed && seed.trim() !== ""
-        ? `/api/avatar/${encodeURIComponent(seed.trim())}`
-        : null;
+  const box = `${SIZES[size]} shrink-0 overflow-hidden rounded-full bg-highlight ${className}`;
 
-  if (url === null) {
+  if (!src || src.trim() === "") {
     return (
-      <span
-        aria-hidden="true"
-        className={`${box} flex items-center justify-center font-semibold text-muted`}
-      >
-        {initialsOf(name)}
+      <span className={box}>
+        <svg
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+          className="h-full w-full text-muted/55"
+        >
+          <circle cx="12" cy="9" r="4" />
+          {/* Runs past the bottom edge so the shoulders are cut by the circle
+              rather than floating inside it. */}
+          <path d="M12 14.4c-4.5 0-8.2 3-8.2 6.7V24h16.4v-2.9c0-3.7-3.7-6.7-8.2-6.7z" />
+        </svg>
       </span>
     );
   }
@@ -54,7 +44,7 @@ export function Avatar({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={url}
+      src={src.trim()}
       alt=""
       loading="lazy"
       decoding="async"

@@ -1,7 +1,7 @@
 // /[fund]/team — roster grouped by sector with roles; past years selectable
 // (SPEC 11.2). Laid out as a portrait grid: a roster is people, and a wall of
 // names in rows reads like a spreadsheet. Members who haven't uploaded a photo
-// get a generated stand-in (see components/ui/Avatar).
+// show the default silhouette.
 
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -38,8 +38,6 @@ function MemberTile({
     <li className="flex flex-col items-center rounded-xl bg-highlight p-3 text-center transition-colors hover:bg-accent-soft sm:p-4">
       <Avatar
         src={member.profiles?.avatar_url}
-        seed={member.user_id}
-        name={name}
         size="lg"
         className={`sm:h-20 sm:w-20 ${
           member.is_sector_leader ? "ring-2 ring-accent" : ""

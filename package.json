@@ -18,8 +18,6 @@
     "gen-types": "supabase gen types typescript --project-id ${SUPABASE_PROJECT_REF:-ucvmssmmnzltwzrdybko} --schema public > src/types/database.ts"
   },
   "dependencies": {
-    "@dicebear/core": "^9.4.3",
-    "@dicebear/notionists": "^9.4.2",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.116.0",
     "fast-xml-parser": "^5.3.4",
