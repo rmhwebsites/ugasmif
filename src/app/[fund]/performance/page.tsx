@@ -9,7 +9,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAuthState, getFundContext } from "@/lib/fund";
 import { valueFund } from "@/lib/valuation";
-import { concentrationCurve, positionContributions } from "@/lib/analysis";
+import {
+  concentrationCurve,
+  maturityLadder,
+  positionContributions,
+  returnDistribution,
+  sectorGains,
+  type SectorGain,
+} from "@/lib/analysis";
 import {
   benchmarkReturnSeries,
   dailyReturnSeries,
@@ -27,10 +34,11 @@ import {
 } from "@/components/charts/CurveChart";
 import { ValueChart } from "@/components/charts/ValueChart";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { AlumniNotice } from "@/components/ui/AlumniNotice";
 import { ContributionBars } from "@/components/analysis/ContributionBars";
 import { ConcentrationChart } from "@/components/analysis/ConcentrationChart";
+import { ReturnDispersion } from "@/components/analysis/ReturnDispersion";
+import { MaturityLadder } from "@/components/analysis/MaturityLadder";
 import {
   RatingBucketTable,
   SectorAttributionTable,
@@ -128,22 +136,39 @@ function durationFromDetail(s: FundSnapshot): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
-function SectorWeightsCard({ v }: { v: FundValuation }) {
+function SectorWeightsCard({
+  v,
+  gains,
+}: {
+  v: FundValuation;
+  gains: SectorGain[];
+}) {
   const rows = v.sectors.filter(
     (s) =>
       s.weightPct > 0 ||
       s.targetWeightPct !== null ||
       s.benchmarkWeightPct !== null
   );
+  // With no targets set the weights table is three columns of dashes, so it
+  // falls back to what each sector actually did. The heading follows.
+  const hasTargets = rows.some(
+    (s) => s.targetWeightPct !== null || s.benchmarkWeightPct !== null
+  );
   return (
     <Card className="overflow-hidden">
       <CardHeader
-        title="Sector weights vs benchmark"
+        title={hasTargets ? "Sector weights vs benchmark" : "Sector P&L"}
         action={<span className="text-xs text-muted">Live valuation</span>}
       />
-      <SectorWeightsTable sectors={rows} />
+      <SectorWeightsTable sectors={rows} gains={gains} />
     </Card>
   );
+}
+
+/** Green above zero, red below, nothing at all at zero. */
+function cellTone(value: number): string {
+  if (value === 0) return "";
+  return value > 0 ? "text-gain" : "text-loss";
 }
 
 function SectorAttributionCard({
@@ -304,8 +329,68 @@ export default async function PerformancePage({
   // useful on day one and render in both branches below.
   const contributions = positionContributions(v.holdings);
   const concentration = concentrationCurve(v.holdings, 20);
+  const dispersion = returnDistribution(v.holdings);
+  const gainsBySector = sectorGains(v.holdings);
+  const ladder = isFixedIncome ? maturityLadder(v.holdings) : [];
   const liveAnalysis = (
     <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+        <StatCard
+          label="Unrealized"
+          value={
+            <span className={dispersion.weightedPct === null ? "" : cellTone(dispersion.weightedPct)}>
+              {dispersion.weightedPct === null
+                ? "—"
+                : formatSignedPercent(dispersion.weightedPct)}
+            </span>
+          }
+          sub="On cost, whole book"
+        />
+        <StatCard
+          label="Winners"
+          value={`${dispersion.winners} / ${
+            dispersion.winners + dispersion.losers
+          }`}
+          sub={
+            dispersion.medianPct === null
+              ? "No priced positions"
+              : `Median ${formatSignedPercent(dispersion.medianPct)}`
+          }
+        />
+        <StatCard
+          label="Best"
+          value={
+            <span className="block truncate" title={dispersion.best?.label}>
+              {dispersion.best?.label ?? "—"}
+            </span>
+          }
+          sub={
+            dispersion.best
+              ? formatSignedPercent(dispersion.best.returnPct)
+              : undefined
+          }
+          subClassName="text-gain"
+        />
+        <StatCard
+          label="Worst"
+          value={
+            <span className="block truncate" title={dispersion.worst?.label}>
+              {dispersion.worst?.label ?? "—"}
+            </span>
+          }
+          sub={
+            dispersion.worst
+              ? formatSignedPercent(dispersion.worst.returnPct)
+              : undefined
+          }
+          subClassName={
+            dispersion.worst && dispersion.worst.returnPct < 0
+              ? "text-loss"
+              : "text-gain"
+          }
+        />
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
         <Card className="overflow-hidden">
           <CardHeader
@@ -316,7 +401,9 @@ export default async function PerformancePage({
           />
           <ContributionBars rows={contributions} fund={fund.slug} limit={8} />
         </Card>
-        <Card>
+        {/* Flex column so the curve grows to match the taller card beside
+            it rather than leaving the bottom third of this one empty. */}
+        <Card className="flex flex-col">
           <CardHeader
             title="Concentration"
             action={
@@ -326,12 +413,36 @@ export default async function PerformancePage({
               </span>
             }
           />
-          <div className="p-4 sm:p-6">
-            <ConcentrationChart points={concentration} fund={fund.slug} />
+          <div className="flex-1 p-4 sm:p-6">
+            <ConcentrationChart
+              points={concentration}
+              fund={fund.slug}
+              className="h-full min-h-52"
+            />
           </div>
         </Card>
       </div>
-      <SectorWeightsCard v={v} />
+      <Card className="overflow-hidden">
+        <CardHeader
+          title="Return dispersion"
+          action={
+            <span className="text-xs text-muted">Every position, on cost</span>
+          }
+        />
+        <ReturnDispersion positions={dispersion.positions} fund={fund.slug} />
+      </Card>
+
+      {isFixedIncome && ladder.length > 0 && (
+        <Card className="overflow-hidden">
+          <CardHeader
+            title="Maturity ladder"
+            action={<span className="text-xs text-muted">Face by year</span>}
+          />
+          <MaturityLadder buckets={ladder} />
+        </Card>
+      )}
+
+      <SectorWeightsCard v={v} gains={gainsBySector} />
     </>
   );
 
@@ -339,10 +450,13 @@ export default async function PerformancePage({
     return (
       <div className="space-y-4">
         {header}
-        <EmptyState
-          title="Return history starts after tonight"
-          hint="Returns, drawdown and attribution are computed from the nightly snapshots, so they appear once two have been recorded. Everything below is live from the current portfolio."
-        />
+        <p className="rounded-lg bg-highlight px-4 py-2.5 text-sm text-muted">
+          <span className="font-medium text-foreground">
+            Return history starts after tonight.
+          </span>{" "}
+          Returns, drawdown and attribution come from the nightly snapshots and
+          need two of them. Everything below is live from the current portfolio.
+        </p>
         {liveAnalysis}
       </div>
     );

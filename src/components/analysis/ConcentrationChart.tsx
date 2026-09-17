@@ -27,9 +27,12 @@ import type { FundSlug } from "@/types/domain";
 export function ConcentrationChart({
   points,
   fund,
+  /** Defaults to a fixed height; pass h-full to fill a flex card instead. */
+  className = "h-52",
 }: {
   points: ConcentrationPoint[];
   fund: FundSlug;
+  className?: string;
 }) {
   const { resolvedTheme } = useTheme();
   const theme = getChartTheme(resolvedTheme, fund);
@@ -43,7 +46,7 @@ export function ConcentrationChart({
   }
 
   return (
-    <div className="h-52 w-full">
+    <div className={`w-full ${className}`}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={points}

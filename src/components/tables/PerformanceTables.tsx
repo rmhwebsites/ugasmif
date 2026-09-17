@@ -17,6 +17,7 @@ import {
   formatPercent,
   formatSignedPercent,
 } from "@/lib/format";
+import type { SectorGain } from "@/lib/analysis";
 import type { SectorContribution } from "@/lib/performance";
 import type { SectorWeight } from "@/types/domain";
 
@@ -87,18 +88,117 @@ const weightColumns: SortableColumn<SectorWeight>[] = [
   },
 ];
 
-export function SectorWeightsTable({ sectors }: { sectors: SectorWeight[] }) {
+export function SectorWeightsTable({
+  sectors,
+  gains,
+}: {
+  sectors: SectorWeight[];
+  gains?: SectorGain[];
+}) {
+  // Target and benchmark stay behind Fund Admin, so on a fund that has not
+  // filled them in those three columns are pure dashes. Drop them and show
+  // what the sector actually did instead — same width, real content.
+  const hasTargets = sectors.some(
+    (s) => s.targetWeightPct !== null || s.benchmarkWeightPct !== null
+  );
+  if (hasTargets || !gains) {
+    return (
+      <SortableTable
+        rows={sectors}
+        columns={weightColumns}
+        rowKey={(s) => s.sectorId}
+        initialSort={{ key: "weight", dir: "desc" }}
+        caption="Sector weights versus benchmark"
+        emptyMessage="No sector data yet. Officers add sectors and set benchmark weights under Fund Admin → Sectors."
+      />
+    );
+  }
   return (
     <SortableTable
-      rows={sectors}
-      columns={weightColumns}
-      rowKey={(s) => s.sectorId}
-      initialSort={{ key: "weight", dir: "desc" }}
-      caption="Sector weights versus benchmark"
-      emptyMessage="No sector data yet. Officers add sectors and set benchmark weights under Fund Admin → Sectors."
+      rows={gains}
+      columns={gainColumns}
+      rowKey={(g) => g.sectorName}
+      initialSort={{ key: "gain", dir: "desc" }}
+      caption="Unrealized gain by sector"
+      emptyMessage="No sector data yet. Officers add sectors under Fund Admin → Sectors."
     />
   );
 }
+
+// ── Sector P&L (when no targets are set) ────────────────────────────────────
+
+const gainColumns: SortableColumn<SectorGain>[] = [
+  {
+    key: "sector",
+    label: "Sector",
+    align: "left",
+    defaultDir: "asc",
+    sortValue: (g) => g.sectorName.toLowerCase(),
+    render: (g) => (
+      <span className="font-medium">
+        {g.sectorName}
+        <span className="ml-2 text-xs text-muted">
+          {g.positions} {g.positions === 1 ? "name" : "names"}
+        </span>
+      </span>
+    ),
+  },
+  {
+    key: "weight",
+    label: "Weight",
+    sortValue: (g) => g.weightPct,
+    render: (g) => (
+      <span className="tabular-nums">{formatPercent(g.weightPct)}</span>
+    ),
+  },
+  {
+    key: "cost",
+    label: "Cost",
+    sortValue: (g) => g.costBasis,
+    render: (g) => (
+      <span className="tabular-nums text-muted">
+        {formatCurrencyWhole(g.costBasis)}
+      </span>
+    ),
+  },
+  {
+    key: "value",
+    label: "Value",
+    sortValue: (g) => g.marketValue,
+    render: (g) => (
+      <span className="tabular-nums">{formatCurrencyWhole(g.marketValue)}</span>
+    ),
+  },
+  {
+    key: "gain",
+    label: "Unrealized",
+    sortValue: (g) => g.unrealizedGain,
+    render: (g) => (
+      <span className={`font-medium tabular-nums ${cellClass(g.unrealizedGain)}`}>
+        {g.unrealizedGain >= 0 ? "+" : "−"}
+        {formatCurrencyWhole(Math.abs(g.unrealizedGain))}
+      </span>
+    ),
+  },
+  {
+    key: "return",
+    label: "Return",
+    sortValue: (g) => g.returnPct,
+    render: (g) => (
+      <span className={`font-medium tabular-nums ${cellClass(g.returnPct)}`}>
+        {pct(g.returnPct)}
+      </span>
+    ),
+  },
+  {
+    key: "share",
+    label: "Share of move",
+    sortValue: (g) => g.shareOfGainPct,
+    render: (g) => (
+      <span className="tabular-nums text-muted">{pct(g.shareOfGainPct)}</span>
+    ),
+  },
+];
 
 // ── Sector attribution ──────────────────────────────────────────────────────
 
