@@ -1,15 +1,18 @@
 // Environment health for /admin (spec Section 11.3): is Yahoo answering, is
-// the Treasury curve fresh, did the last backup succeed, and are Resend and
-// the Google Sheets service account configured. Same audience as the backup
-// button — any current-year fund officer, the faculty advisor, or an app
-// admin. Reads go through the user-scoped client (RLS applies); the env
-// checks only report booleans, never values.
+// the Treasury curve fresh, did the last backup succeed, is the Resend domain
+// verified, and can the service account actually reach the backup sheet. The
+// last two are live probes, not env-var checks — a revoked key or a sheet
+// nobody shared looks fine in the environment and fails at 9pm when the cron
+// runs. Same audience as the backup button: any current-year fund officer,
+// the faculty advisor, or an app admin. Reads go through the user-scoped
+// client (RLS applies), and no check ever echoes a secret.
 
 import { NextResponse } from "next/server";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { getAuthState, getCurrentYear } from "@/lib/fund";
 import { OFFICER_ROLES } from "@/lib/permissions";
 import { getQuote } from "@/lib/yahoo";
+import { checkResend, checkSheets } from "@/lib/health";
 import type { BackupRun, Profile } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
@@ -111,23 +114,26 @@ export async function GET() {
   const lastRun = (runRow as BackupRun | null) ?? null;
   const backup = { ok: lastRun?.status === "ok", lastRun };
 
-  // Config presence only — never echo secrets.
-  const resendConfigured = Boolean(process.env.RESEND_API_KEY);
-  const googleSheetsConfigured = Boolean(
-    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
-      process.env.GOOGLE_PRIVATE_KEY &&
-      process.env.GOOGLE_SHEET_ID
-  );
+  // Live probes, in parallel — each has its own timeout and never throws.
+  const [resend, sheets] = await Promise.all([checkResend(), checkSheets()]);
+
+  // An unconfigured integration is not a failure in dev, so the rollup only
+  // counts things that are meant to be working.
+  const configuredAndBroken =
+    (resend.configured && !resend.ok) || (sheets.configured && !sheets.ok);
 
   return NextResponse.json({
-    ok: yahoo.ok && treasuryCurve.ok && backup.ok,
+    ok: yahoo.ok && treasuryCurve.ok && backup.ok && !configuredAndBroken,
     checkedAt: new Date().toISOString(),
     checks: {
       yahoo,
       treasuryCurve,
       backup,
-      resendConfigured,
-      googleSheetsConfigured,
+      resend,
+      sheets,
+      // Kept so an older client reading these keys still renders.
+      resendConfigured: resend.configured,
+      googleSheetsConfigured: sheets.configured,
     },
   });
 }

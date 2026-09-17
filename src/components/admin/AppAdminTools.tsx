@@ -180,8 +180,15 @@ export function UsersTable({
 
 interface HealthCheck {
   name: string;
-  ok: boolean;
+  /** "off" is an integration nobody has configured — not a failure in dev. */
+  state: "ok" | "broken" | "off";
   detail?: string;
+}
+
+interface ServiceCheck {
+  ok: boolean;
+  configured: boolean;
+  detail: string;
 }
 
 interface HealthResponse {
@@ -193,32 +200,34 @@ interface HealthResponse {
       ageDays: number | null;
     };
     backup: { ok: boolean; lastRun: { status: string; started_at: string } | null };
-    resendConfigured: boolean;
-    googleSheetsConfigured: boolean;
+    resend: ServiceCheck;
+    sheets: ServiceCheck;
   };
 }
 
+const serviceState = (c: ServiceCheck): HealthCheck["state"] =>
+  !c.configured ? "off" : c.ok ? "ok" : "broken";
+
 function toRows(data: HealthResponse): HealthCheck[] {
-  const { yahoo, treasuryCurve, backup, resendConfigured, googleSheetsConfigured } =
-    data.checks;
+  const { yahoo, treasuryCurve, backup, resend, sheets } = data.checks;
   return [
     {
       name: "Yahoo Finance",
-      ok: yahoo.ok,
+      state: yahoo.ok ? "ok" : "broken",
       detail: yahoo.ok
         ? `SPY ${yahoo.price?.toFixed(2) ?? "—"}`
         : yahoo.error ?? "unreachable or serving stale prices",
     },
     {
       name: "Treasury curve",
-      ok: treasuryCurve.ok,
+      state: treasuryCurve.ok ? "ok" : "broken",
       detail: treasuryCurve.latestDate
         ? `latest ${treasuryCurve.latestDate} (${treasuryCurve.ageDays}d old)`
         : "never fetched",
     },
     {
       name: "Nightly backup",
-      ok: backup.ok,
+      state: backup.ok ? "ok" : "broken",
       detail: backup.lastRun
         ? `${backup.lastRun.status} at ${formatDateTime(
             backup.lastRun.started_at
@@ -227,15 +236,13 @@ function toRows(data: HealthResponse): HealthCheck[] {
     },
     {
       name: "Resend (email)",
-      ok: resendConfigured,
-      detail: resendConfigured ? "configured" : "RESEND_API_KEY not set",
+      state: serviceState(resend),
+      detail: resend.detail,
     },
     {
       name: "Google Sheets backup",
-      ok: googleSheetsConfigured,
-      detail: googleSheetsConfigured
-        ? "configured"
-        : "GOOGLE_* env vars not set",
+      state: serviceState(sheets),
+      detail: sheets.detail,
     },
   ];
 }
@@ -269,13 +276,20 @@ export function HealthPanel() {
           key={c.name}
           className="flex items-center justify-between gap-2 rounded-lg bg-highlight px-3 py-2 text-sm"
         >
-          <span>
+          <span className="min-w-0">
             {c.name}
             {c.detail && (
               <span className="text-muted"> · {c.detail}</span>
             )}
           </span>
-          <Badge tone={c.ok ? "gain" : "loss"}>{c.ok ? "ok" : "check"}</Badge>
+          <Badge
+            className="shrink-0"
+            tone={
+              c.state === "ok" ? "gain" : c.state === "off" ? "neutral" : "loss"
+            }
+          >
+            {c.state === "ok" ? "ok" : c.state === "off" ? "off" : "check"}
+          </Badge>
         </li>
       ))}
     </ul>
