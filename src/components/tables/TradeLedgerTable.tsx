@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { isBondInstrument } from "@/components/trades/TicketCard";
+import { SecurityLogo } from "@/components/holdings/SecurityLogo";
 import {
   SortableTable,
   type SortableColumn,
@@ -71,16 +72,23 @@ function buildColumns(fund: string): SortableColumn<LedgerRow>[] {
         t.holding ? (
           <Link
             href={`/${fund}/holdings/${t.holding.id}`}
-            className="block hover:underline"
+            className="flex items-center gap-2 hover:underline"
           >
-            <span className="font-semibold">
-              {t.holding.symbol ?? t.holding.name}
-            </span>
-            {t.holding.symbol && (
-              <span className="block max-w-[180px] truncate text-[10px] text-muted sm:text-xs">
-                {t.holding.name}
+            <SecurityLogo
+              symbol={t.holding.symbol}
+              name={t.holding.name}
+              size="sm"
+            />
+            <span className="min-w-0">
+              <span className="block font-semibold">
+                {t.holding.symbol ?? t.holding.name}
               </span>
-            )}
+              {t.holding.symbol && (
+                <span className="block max-w-[180px] truncate text-[10px] text-muted sm:text-xs">
+                  {t.holding.name}
+                </span>
+              )}
+            </span>
           </Link>
         ) : (
           <span className="text-muted">—</span>

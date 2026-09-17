@@ -21,6 +21,7 @@ import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
 import { HoldingsTable } from "@/components/holdings/HoldingsTable";
+import { SecurityLogo } from "@/components/holdings/SecurityLogo";
 import { SectorBarChart } from "@/components/charts/SectorBarChart";
 import { AllocationDonut } from "@/components/charts/AllocationDonut";
 import { RatesStrip } from "@/components/charts/RatesStrip";
@@ -69,13 +70,20 @@ function MoverRow({
       href={`/${fund}/holdings/${h.holding.id}`}
       className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-highlight"
     >
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">
-          {h.holding.symbol ?? h.holding.name}
-        </p>
-        {h.holding.symbol && (
-          <p className="truncate text-xs text-muted">{h.holding.name}</p>
-        )}
+      <div className="flex min-w-0 items-center gap-2.5">
+        <SecurityLogo
+          symbol={h.holding.symbol}
+          name={h.holding.name}
+          size="md"
+        />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">
+            {h.holding.symbol ?? h.holding.name}
+          </p>
+          {h.holding.symbol && (
+            <p className="truncate text-xs text-muted">{h.holding.name}</p>
+          )}
+        </div>
       </div>
       <div className="shrink-0 text-right">
         <p

@@ -28,6 +28,7 @@ import { PriceSourceBadge } from "@/components/holdings/PriceSourceBadge";
 import { ValueChart } from "@/components/charts/ValueChart";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge, PitchStatusBadge } from "@/components/ui/Badge";
+import { SecurityLogo } from "@/components/holdings/SecurityLogo";
 import {
   HoldingTradesTable,
   MarkHistoryTable,
@@ -316,25 +317,35 @@ export default async function HoldingDetailPage({
           Holdings
         </Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold sm:text-3xl">
-              {isBond ? h.name : h.symbol ?? h.name}
-            </h1>
+          <div className="flex min-w-0 items-start gap-3">
             {!isBond && h.symbol && (
-              <p className="mt-0.5 text-sm text-muted">{h.name}</p>
+              <SecurityLogo
+                symbol={h.symbol}
+                name={h.name}
+                size="lg"
+                className="mt-0.5"
+              />
             )}
-            {isBond && h.issuer && (
-              <p className="mt-0.5 text-sm text-muted">{h.issuer}</p>
-            )}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge tone="accent">
-                {TYPE_LABELS[h.instrument_type] ?? h.instrument_type}
-              </Badge>
-              {v.sectorName && <Badge>{v.sectorName}</Badge>}
-              {h.rating && <Badge tone="info">{h.rating}</Badge>}
-              {h.cusip && (
-                <span className="text-xs text-muted">CUSIP {h.cusip}</span>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold sm:text-3xl">
+                {isBond ? h.name : h.symbol ?? h.name}
+              </h1>
+              {!isBond && h.symbol && (
+                <p className="mt-0.5 text-sm text-muted">{h.name}</p>
               )}
+              {isBond && h.issuer && (
+                <p className="mt-0.5 text-sm text-muted">{h.issuer}</p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge tone="accent">
+                  {TYPE_LABELS[h.instrument_type] ?? h.instrument_type}
+                </Badge>
+                {v.sectorName && <Badge>{v.sectorName}</Badge>}
+                {h.rating && <Badge tone="info">{h.rating}</Badge>}
+                {h.cusip && (
+                  <span className="text-xs text-muted">CUSIP {h.cusip}</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="text-right">

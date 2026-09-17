@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
 import { PriceSourceBadge } from "@/components/holdings/PriceSourceBadge";
+import { SecurityLogo } from "@/components/holdings/SecurityLogo";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import {
@@ -129,15 +130,22 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
         render: (v) => (
           <Link
             href={`/${fund}/holdings/${v.holding.id}`}
-            className="block"
+            className="flex items-center gap-2"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-xs font-semibold text-foreground sm:text-sm">
-              {v.holding.symbol ?? "—"}
-            </p>
-            <p className="max-w-[110px] truncate text-[10px] text-muted md:hidden">
-              {v.holding.name}
-            </p>
+            <SecurityLogo
+              symbol={v.holding.symbol}
+              name={v.holding.name}
+              size="sm"
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-foreground sm:text-sm">
+                {v.holding.symbol ?? "—"}
+              </span>
+              <span className="block max-w-[110px] truncate text-[10px] text-muted md:hidden">
+                {v.holding.name}
+              </span>
+            </span>
           </Link>
         ),
       },
