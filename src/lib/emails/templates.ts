@@ -39,6 +39,17 @@ function appUrl(): string {
 }
 
 /**
+ * Where the footer's "profile page" link goes. There is no top-level
+ * /profile — the page lives under the fund, at /[fund]/profile — so an email
+ * that knows its fund links straight there and one that does not links to
+ * "/", which redirects to whichever fund the member last used.
+ */
+function profileUrl(fundSlug: FundSlug | undefined): string {
+  const base = appUrl();
+  return fundSlug ? `${base}/${fundSlug}/profile` : `${base}/`;
+}
+
+/**
  * Renders the branded HTML email plus a plain-text fallback. Table-based
  * layout with inline styles so it survives every email client.
  */
@@ -119,7 +130,9 @@ export function renderEmail(opts: EmailTemplateOptions): RenderedEmail {
             <td style="padding:20px 8px 0;">
               <p style="margin:0;font-family:Inter,Helvetica,Arial,sans-serif;font-size:12px;color:#6b6b73;line-height:1.6;">
                 UGA Student Managed Investment Fund &middot; sent by SMIF Hub.<br />
-                Manage email preferences on your <a href="${escapeHtml(appUrl())}/profile" style="color:#9c9ca4;">profile page</a>.
+                Manage email preferences on your <a href="${escapeHtml(
+                  profileUrl(opts.fundSlug)
+                )}" style="color:#9c9ca4;">profile page</a>.
               </p>
             </td>
           </tr>
@@ -144,7 +157,7 @@ export function renderEmail(opts: EmailTemplateOptions): RenderedEmail {
     "",
     "--",
     "UGA Student Managed Investment Fund - sent by SMIF Hub.",
-    `Manage email preferences at ${appUrl()}/profile`
+    `Manage email preferences at ${profileUrl(opts.fundSlug)}`
   );
 
   return { html, text: textParts.join("\n") };
