@@ -247,6 +247,15 @@ integration, which is different from it being broken.
   date that already has one is reported as skipped — fix a bad value by
   correcting it in the file and importing the dates that are still missing,
   not by re-importing the whole file and expecting it to replace anything.
+- **Vercel is deploying old code.** The code lives in `rmhwebsites/ugasmif`
+  and Vercel deploys from a mirror in a second GitHub account, kept in sync by
+  `.github/workflows/mirror.yml` on every push to `main`. If the mirror has
+  stopped updating, check the Actions tab on `rmhwebsites/ugasmif`: the usual
+  cause is that `MIRROR_TOKEN` expired, and the sync stops silently when it
+  does. The setup steps are in the comments at the top of that workflow file.
+  If you ever consolidate onto one GitHub account, delete the workflow and
+  point Vercel straight at the real repository — the mirror exists only
+  because the two accounts are separate.
 - **An alumnus says the dashboard is empty.** Check
   `settings.alumni_can_view_current` on `/[fund]/admin/settings`. With it off,
   alumni keep everything the fund did while they were on the roster and stop
