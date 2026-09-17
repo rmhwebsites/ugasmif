@@ -65,12 +65,16 @@ order, including the email templates you have to change by hand.
 
 ### Migrations
 
-`node scripts/apply-migrations.mjs` applies everything in
-`supabase/migrations/` and records what it applied in a `schema_migrations`
-table, so rerunning is safe. It connects over `SUPABASE_DB_URL` with `psql`
-when it can and falls back to the Supabase Management API over HTTPS. If
-neither works, paste the files into the SQL editor in the Supabase dashboard in
-filename order.
+`npm run migrate` applies everything in `supabase/migrations/` and records
+what it applied in a `schema_migrations` table, so rerunning is safe. It
+connects over `SUPABASE_DB_URL` with `psql` when it can and falls back to the
+Supabase Management API over HTTPS. If neither works, paste the files into the
+SQL editor in the Supabase dashboard in filename order.
+
+Never edit a migration that has already been applied — add a new numbered file
+instead. `supabase/tests/run.sh` applies every migration to a throwaway local
+database and runs the RLS and database-function suite against it; each check
+prints its expectation next to the result.
 
 ### Seed data
 
@@ -104,7 +108,9 @@ both funds in the roster import format (SPEC 17.1).
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
 | `npm run seed` | Seed data (SPEC 18) |
+| `npm run migrate` | Apply `supabase/migrations/` in order |
 | `npm run export-roster` | Roster CSV to stdout |
+| `npm run gen-types` | Regenerate `src/types/database.ts` (needs the Supabase CLI) |
 
 ## Project structure
 

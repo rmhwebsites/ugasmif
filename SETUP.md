@@ -51,7 +51,8 @@ https://supabase.com/dashboard/account/tokens). Add `--dry-run` to see what it
 would do.
 
 If neither path works from your machine, open the SQL editor in the dashboard
-and paste the files in order: `0001_init.sql`, then `0002_storage.sql`.
+and paste the files in numeric order. Every migration is written to be safe to
+run twice, so a partial attempt is recoverable.
 
 What you get:
 
@@ -61,9 +62,25 @@ What you get:
 - `0002_storage.sql`: the storage buckets. `pitch-files` (private, 25 MB cap,
   read access scoped to members of the fund in the first path segment) and
   `backups` (private, service role only). You do not create these by hand.
+- `0003_onboarding.sql`: `first_name`, `last_name`, `phone` and `onboarded_at`
+  on `profiles` (names are split out of any existing `full_name`), the public
+  `avatars` bucket with a 2 MB cap and per-member write access, and the policy
+  plus trigger that let a member set their own sector and nothing else.
+- `0004_spec_fixes.sql`: `leads_strategy_team(fund)` so the Equity Strategies
+  or Macro leader can set the whole fund's target weights,
+  `is_any_roster_manager()` for the academic-year policies, `threshold_pct`
+  and `quorum_pct` frozen onto each pitch so a settings change never rewrites
+  a past result, and `pitch_vote_count(pitch)` so members can see how many
+  ballots are in without seeing the split.
+- `0005_alumni_view.sql`: `alumni_view_horizon(fund)`, which makes
+  `settings.alumni_can_view_current` actually do something. With it off, an
+  alumnus keeps the record of what the fund did while they were on the roster
+  and stops seeing the live book.
 
 Check it worked: Table editor should list `funds`, `memberships`, `holdings`
-and the rest, and Storage should list the two buckets.
+and the rest; Storage should list `pitch-files`, `backups` and `avatars`; and
+`select onboarded_at from profiles limit 1` and
+`select threshold_pct from pitches limit 1` should both run without error.
 
 ## 3. Auth settings
 

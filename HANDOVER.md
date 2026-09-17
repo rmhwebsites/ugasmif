@@ -95,6 +95,31 @@ update public.profiles set is_app_admin = true where email = 'someone@uga.edu';
 That is the break-glass path. It works because the SQL editor runs as the
 database owner; the same update from the app would be refused.
 
+## Database migrations
+
+The schema lives in `supabase/migrations/` as numbered SQL files. They are
+applied in order and each one is written to be safe to run twice.
+
+**Never edit a migration that has already been applied.** Add a new numbered
+file instead. A migration that has run is history; changing it means the
+database and the repository disagree and nobody can tell which is right.
+
+To apply pending migrations, whichever is easiest:
+
+- **Supabase SQL editor** (no tooling needed). Dashboard → SQL Editor → New
+  query, paste the file's contents, run. Do them in numeric order.
+- **`npm run migrate`**, which needs either `SUPABASE_DB_URL` reachable on
+  port 5432 with `psql` installed, or a `SUPABASE_ACCESS_TOKEN` (an `sbp_…`
+  token from supabase.com/dashboard/account/tokens) so it can go over HTTPS.
+  It tracks what it has applied, so re-running is safe.
+
+To check what is applied, look for something the migration added. For example
+`select onboarded_at from profiles limit 1` errors if `0003` has not run.
+
+`npm run gen-types` regenerates `src/types/database.ts` from the live schema.
+It needs the Supabase CLI. `src/types/domain.ts` is hand written and is what
+the app code actually imports, so regenerating types is optional.
+
 ## Backups
 
 Two things run every night at 08:00 UTC (`/api/cron/backup`):
@@ -187,9 +212,24 @@ much easier to recover from a bad day than from a bad restore.
 
 ## Routine things that go wrong
 
-- **Nobody is getting email.** Check Resend's Logs tab. Usually the domain
-  verification lapsed or the API key was rotated without updating Vercel and
-  the Supabase SMTP settings.
+**Start at `/admin`.** The environment health panel there probes the live
+services rather than checking that settings exist, and says what is wrong in
+one line: whether Yahoo is answering, how old the Treasury curve is, whether
+the last backup succeeded, whether the Resend sending domain is still
+verified, and whether the service account can actually open the backup
+spreadsheet. A row reading "off" in grey means nobody configured that
+integration, which is different from it being broken.
+
+- **Nobody is getting email.** Check the Resend row on `/admin` first — it
+  names the problem, usually a lapsed domain verification or a rotated key
+  that Vercel and the Supabase SMTP settings did not get. Resend's Logs tab
+  shows individual sends.
+- **The nightly backup is not reaching the spreadsheet.** The Google Sheets
+  row on `/admin` distinguishes the three causes: the sheet was never shared
+  with the service account, `GOOGLE_SHEET_ID` names nothing, or
+  `GOOGLE_PRIVATE_KEY` lost its `\n` escapes when it was pasted in. The JSON
+  export to Supabase Storage is unaffected either way, and that is the file a
+  restore reads.
 - **Prices look stale.** Yahoo throttles sometimes. The app falls back to the
   last stored price and labels it stale, and recovers by itself.
 - **Bond prices are old.** Corporates and agency MBS are priced from manual
@@ -198,6 +238,19 @@ much easier to recover from a bad day than from a bad restore.
 - **Someone cannot sign in.** An officer can send a reset link or set a
   temporary password from `/[fund]/admin/members/[id]`. Both are audit logged,
   and a temporary password forces a change at next login.
+- **The performance page says there is not enough history.** It needs two
+  nightly snapshots, so a fresh deployment shows that for a day. To extend the
+  chart back before launch, paste monthly values from the old newsletters into
+  **Import snapshot history** on `/[fund]/admin/holdings` as
+  `date,total_value,cash`. It fills in the benchmark's close for each date
+  itself. Snapshots are a permanent record and are never overwritten, so a
+  date that already has one is reported as skipped — fix a bad value by
+  correcting it in the file and importing the dates that are still missing,
+  not by re-importing the whole file and expecting it to replace anything.
+- **An alumnus says the dashboard is empty.** Check
+  `settings.alumni_can_view_current` on `/[fund]/admin/settings`. With it off,
+  alumni keep everything the fund did while they were on the roster and stop
+  seeing what it holds today, which is deliberate. The page tells them so.
 
 ## Turnover each spring
 
