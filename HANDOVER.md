@@ -120,6 +120,51 @@ To check what is applied, look for something the migration added. For example
 It needs the Supabase CLI. `src/types/domain.ts` is hand written and is what
 the app code actually imports, so regenerating types is optional.
 
+## Loading the Arch book from the PM workbook
+
+The Arch PM keeps the book of record in Excel (`Arch_PM-vYYYY.xlsx`). On a
+machine without the market-data add-in most of its live-price cells read
+`#NAME?`, but every static field — cusip, issue and maturity dates, quantity,
+price paid, coupon, duration, rating — is a stored value, so the positions are
+fully recoverable from the file regardless.
+
+Two steps:
+
+1. **Workbook to JSON.** A small Python extractor walks the position sheets
+   (Treasuries, MBS, Corporates, Money Market, Yield Curve position, Agg ETF)
+   and writes one row per open position. It reads the conventions off the
+   workbook's own formulas rather than assuming them:
+
+   - individual bonds price per 100 face and the market-value formula is
+     `U*H*10`, so face value is `quantity x 1000`
+   - TIPS use `U*H*10*F`, so the inflation factor belongs in the face — which
+     is also correct for the coupon, since TIPS pay on adjusted principal
+   - ETFs use `U*H`, so quantity is a share count
+
+   Check the extraction by totalling cost basis and comparing against each
+   sheet's own `K` totals. They should agree to the cent once you add back the
+   accrued interest paid (column `J`) and any leg the totals skip — the Yield
+   Curve sheet's total omits the short VGLT leg.
+
+2. **JSON to database.** `npm run import-arch -- path/to/positions.json`.
+   It creates any sector the workbook uses that the fund lacks, then replaces
+   the holdings wholesale: the workbook is the book of record, so a position
+   missing from it has been sold.
+
+**The positions file is not in this repository.** It is a real portfolio and
+this repo is public. Keep it on your own machine and pass it by path.
+
+Two things the app cannot model, which the importer handles by declining to
+guess:
+
+- **TIPS** quote off a real yield curve and we only carry the nominal one.
+  Running a 0.75% 2042 TIPS through the nominal curve marks it at 53 when it
+  cost 78.65, so TIPS import as `manual` and show at cost until the PM enters
+  a mark. Same for corporates and agencies.
+- **Short positions** (the fund runs a short VGLT leg against long VGSH/VGIT)
+  carry a negative quantity. They price and total correctly, and show a
+  negative weight, which is what a short is.
+
 ## Backups
 
 Two things run every night at 08:00 UTC (`/api/cron/backup`):
