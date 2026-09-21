@@ -27,7 +27,10 @@ const bodySchema = z
     name: z.string().trim().min(1).max(200),
     issuer: z.string().trim().max(200).optional().nullable(),
     sector_id: z.uuid().optional().nullable(),
-    quantity: z.number().min(0),
+    // Negative is a short. The Arch fund runs one (a short VGLT leg against
+    // long VGSH/VGIT), and rejecting it here meant a position the importer
+    // could create was one the PM could never edit.
+    quantity: z.number(),
     avg_cost: z.number().min(0),
     coupon_rate: z.number().min(0).max(30).optional().nullable(),
     maturity_date: z.string().date().optional().nullable(),

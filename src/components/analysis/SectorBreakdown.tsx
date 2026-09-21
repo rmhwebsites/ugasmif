@@ -43,9 +43,20 @@ export function SectorWeights({ rows, fund }: { rows: Row[]; fund: string }) {
               {r.name}
             </span>
             <span className="h-5 w-24 shrink-0 overflow-hidden rounded-sm bg-highlight sm:w-32">
+              {/* A short's share is negative, and a negative CSS width is
+                  invalid — the browser drops the rule and the block element
+                  fills its whole track, drawing the short as the widest bar
+                  on the chart. Clamp the bar; the label carries the sign. */}
               <span
-                className="block h-full rounded-sm bg-accent/70"
-                style={{ width: `${(r.sharePct / widest) * 100}%` }}
+                className={`block h-full rounded-sm ${
+                  r.sharePct < 0 ? "bg-loss/70" : "bg-accent/70"
+                }`}
+                style={{
+                  width: `${Math.min(
+                    100,
+                    (Math.abs(r.sharePct) / Math.abs(widest || 1)) * 100
+                  )}%`,
+                }}
               />
             </span>
             <span className="w-24 shrink-0 text-right text-xs tabular-nums sm:text-sm">

@@ -14,9 +14,11 @@
  * repository is public, so it stays on the operator's machine and is passed in
  * by path.
  *
- * Replaces the fund's holdings wholesale rather than merging: the workbook is
- * the book of record, and a position missing from it has been sold. Runs in
- * one pass so a failure part-way leaves the old set intact.
+ * The workbook is the book of record, so a position missing from it has been
+ * sold. Surviving positions are matched on instrument and updated IN PLACE,
+ * keeping their id — otherwise a re-import would cascade away the PM's bond
+ * marks and orphan any trade pointing at a holding. Sold positions are closed,
+ * not deleted, so their history survives.
  */
 
 import { readFileSync } from "node:fs";
@@ -68,12 +70,16 @@ function pricingMethod(p: Position): "live" | "treasury_curve" | "manual" {
   return "manual";
 }
 
-/** Years to maturity, for picking the curve point a mark drifts against. */
-function benchmarkTenor(p: Position): number | null {
+/**
+ * Years REMAINING to maturity, for picking the curve point a mark drifts
+ * against. Measured from today rather than from the purchase date: a 2028
+ * bond bought in 2021 is a 2-year today, and drifting it off the 7-year point
+ * would misstate its rate sensitivity by a factor of three.
+ */
+function benchmarkTenor(p: Position, today: number): number | null {
   if (!BOND_TYPES.has(p.instrument_type) || !p.maturity_date) return null;
-  const years =
-    (Date.parse(p.maturity_date) - Date.parse(p.opened_on ?? p.maturity_date)) /
-    (365.25 * 24 * 3600 * 1000);
+  const years = (Date.parse(p.maturity_date) - today) / (365.25 * 24 * 3600 * 1000);
+  if (years <= 0) return null;
   // Snap to the tenors the Treasury publishes, so the drift has a real point.
   const TENORS = [0.25, 0.5, 1, 2, 3, 5, 7, 10, 20, 30];
   return TENORS.reduce((best, t) =>
@@ -113,7 +119,7 @@ async function main() {
   const db = client();
   const { data: fund, error: fundError } = await db
     .from("funds")
-    .select("id, name")
+    .select("id, name, cash_balance")
     .eq("slug", FUND_SLUG)
     .single();
   if (fundError || !fund) throw fundError ?? new Error("Arch fund not found");
@@ -142,6 +148,7 @@ async function main() {
     console.log(`  created sector ${name}`);
   }
 
+  const today = Date.now();
   const rows = positions.map((p) => ({
     fund_id: fund.id,
     sector_id: p.sector ? byName.get(p.sector.toLowerCase()) ?? null : null,
@@ -162,20 +169,85 @@ async function main() {
     day_count: dayCount(p),
     payment_frequency: paymentFrequency(p),
     pricing_method: pricingMethod(p),
-    benchmark_tenor: benchmarkTenor(p),
+    benchmark_tenor: benchmarkTenor(p, today),
     is_active: true,
     notes: p.notes ?? null,
   }));
 
-  // Everything the workbook does not list has been sold.
-  const { error: clearError } = await db
+  // Match on the instrument, not on identity. Deleting and re-inserting would
+  // cascade away every bond mark the PM has entered, orphan any trade or pitch
+  // pointing at a holding, and change the ids behind existing snapshots — so
+  // rows that survive are updated in place and keep their id.
+  const { data: current, error: currentError } = await db
     .from("holdings")
-    .delete()
+    .select("id, instrument_type, cusip, symbol, is_active")
     .eq("fund_id", fund.id);
-  if (clearError) throw clearError;
+  if (currentError) throw currentError;
 
-  const { error: insertError } = await db.from("holdings").insert(rows);
-  if (insertError) throw insertError;
+  const key = (h: { instrument_type: string; cusip: string | null; symbol: string | null }) =>
+    `${h.instrument_type}:${(h.cusip ?? h.symbol ?? "").toUpperCase()}`;
+
+  // The database can already hold two rows for one instrument — an earlier
+  // import of the workbook's separate tax lots did exactly that. Keep the
+  // first of each group to carry the id forward and retire the rest, or the
+  // stale duplicate survives and its value is counted twice.
+  // Active rows first in each group, so a position that comes back reuses its
+  // original row (and its marks) rather than starting a second one.
+  const ordered = [...(current ?? [])].sort(
+    (a, b) => Number(b.is_active) - Number(a.is_active)
+  );
+  const existingByKey = new Map<string, string[]>();
+  const closedIds = new Set(ordered.filter((h) => !h.is_active).map((h) => h.id));
+  for (const h of ordered) {
+    const k = key(h);
+    existingByKey.set(k, [...(existingByKey.get(k) ?? []), h.id]);
+  }
+
+  const updates = rows.filter((r) => existingByKey.has(key(r)));
+  const inserts = rows.filter((r) => !existingByKey.has(key(r)));
+  const keep = new Set(rows.map((r) => key(r)));
+  const goneIds = [...existingByKey.entries()]
+    .flatMap(([k, ids]) => (keep.has(k) ? ids.slice(1) : ids))
+    // Already closed on an earlier run; re-closing it would report work that
+    // did not happen.
+    .filter((id) => !closedIds.has(id));
+
+  for (const r of updates) {
+    const { error } = await db
+      .from("holdings")
+      .update(r)
+      .eq("id", (existingByKey.get(key(r)) as string[])[0]);
+    if (error) throw error;
+  }
+  if (inserts.length > 0) {
+    const { error } = await db.from("holdings").insert(inserts);
+    if (error) throw error;
+  }
+
+  // Anything the workbook no longer lists has been sold, as has any duplicate
+  // row left over from a previous import. Close rather than delete, so marks
+  // and trade history survive.
+  let closed = 0;
+  if (goneIds.length > 0) {
+    const { error } = await db
+      .from("holdings")
+      .update({ is_active: false, closed_on: new Date(today).toISOString().slice(0, 10) })
+      .in("id", goneIds);
+    if (error) throw error;
+    closed = goneIds.length;
+  }
+
+  // The workbook accounts for every dollar as a position, and its cash is the
+  // sweep. A separate balance on the fund would be counted on top of it.
+  const sweep = positions.find((p) => p.instrument_type === "money_market");
+  if (sweep && Number(fund.cash_balance ?? 0) !== 0) {
+    const { error } = await db.from("funds").update({ cash_balance: 0 }).eq("id", fund.id);
+    if (error) throw error;
+    console.log(
+      `  cash_balance $${Number(fund.cash_balance).toLocaleString()} -> 0; ` +
+        `the ${sweep.name} position carries the fund's cash`
+    );
+  }
 
   const bonds = rows.filter((r) => BOND_TYPES.has(r.instrument_type));
   const cost = positions.reduce(
@@ -184,7 +256,8 @@ async function main() {
     0
   );
   console.log(
-    `\n  ${rows.length} positions into ${fund.name}` +
+    `\n  ${updates.length} updated, ${inserts.length} new, ${closed} closed` +
+      `\n  ${rows.length} positions into ${fund.name}` +
       `\n  ${bonds.length} individual bonds, ${rows.length - bonds.length} funds and cash` +
       `\n  cost basis $${cost.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
   );

@@ -196,17 +196,22 @@ export interface ReturnDistribution {
  * Positions with no cost basis are dropped rather than counted flat: a
  * donated or zero-cost lot has no return to speak of, and dividing by it
  * gives an infinity that would swamp the axis.
+ *
+ * A short has a NEGATIVE cost basis, because the fund received the cash
+ * rather than paying it. Dividing by the signed figure would flip the sign
+ * of a short's return, so the denominator is the absolute exposure — a short
+ * that gains money reads positive, which is what happened.
  */
 export function returnDistribution(
   holdings: HoldingValuation[]
 ): ReturnDistribution {
   const positions: PositionReturn[] = holdings
-    .filter((h) => h.costBasis > 0)
+    .filter((h) => h.costBasis !== 0)
     .map((h) => ({
       id: h.holding.id,
       label: h.holding.symbol ?? h.holding.name ?? "—",
       sectorName: h.sectorName,
-      returnPct: (h.unrealizedGain / h.costBasis) * 100,
+      returnPct: (h.unrealizedGain / Math.abs(h.costBasis)) * 100,
       unrealizedGain: h.unrealizedGain,
       weightPct: h.weightPct,
     }))
@@ -230,12 +235,11 @@ export function returnDistribution(
       ? positions[mid].returnPct
       : (positions[mid - 1].returnPct + positions[mid].returnPct) / 2;
 
-  const cost = holdings
-    .filter((h) => h.costBasis > 0)
-    .reduce((s, h) => s + h.costBasis, 0);
-  const gain = holdings
-    .filter((h) => h.costBasis > 0)
-    .reduce((s, h) => s + h.unrealizedGain, 0);
+  // Capital at risk, so a short's exposure adds to the denominator instead of
+  // netting against the longs.
+  const priced = holdings.filter((h) => h.costBasis !== 0);
+  const cost = priced.reduce((s, h) => s + Math.abs(h.costBasis), 0);
+  const gain = priced.reduce((s, h) => s + h.unrealizedGain, 0);
 
   return {
     positions,
@@ -362,7 +366,13 @@ export function maturityLadder(
       year,
       label,
       marketValue,
-      face: rows.reduce((s, h) => s + Number(h.holding.quantity), 0),
+      // Only instruments that HAVE a face have one: quantity is face dollars
+      // on a bond but a share count on a fund, and adding the two gives a
+      // number in no unit at all.
+      face: rows.reduce(
+        (s, h) => s + (h.holding.maturity_date ? Number(h.holding.quantity) : 0),
+        0
+      ),
       weightPct: total > 0 ? (marketValue / total) * 100 : 0,
       avgCouponPct: weightedAverage(
         rows.map((h) => ({

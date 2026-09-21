@@ -327,3 +327,63 @@ describe("maturityLadder", () => {
     expect(maturityLadder([])).toEqual([]);
   });
 });
+
+// ── Shorts and mixed units, from the real Arch book ─────────────────────────
+//
+// The fund runs a short VGLT leg against long VGSH/VGIT, and holds ETFs
+// (quantity = shares) beside bonds (quantity = face dollars). Both broke
+// analysis that assumed a long-only, single-unit book.
+
+describe("returnDistribution with a short leg", () => {
+  it("keeps the short instead of filtering it out on a negative cost basis", () => {
+    const short = {
+      ...pos("VGLT", -4134, -4435),
+      costBasis: -4435,
+      unrealizedGain: 301,
+    } as HoldingValuation;
+    const d = returnDistribution([pos("LONG", 110, 100), short]);
+    expect(d.positions.map((p) => p.label)).toContain("VGLT");
+  });
+
+  it("reads a profitable short as a gain, not a loss", () => {
+    // Sold at 4435, now costs 4134 to buy back: the fund is up 301.
+    const short = {
+      ...pos("VGLT", -4134, -4435),
+      costBasis: -4435,
+      unrealizedGain: 301,
+    } as HoldingValuation;
+    const d = returnDistribution([short]);
+    // Dividing by the signed basis would flip this negative.
+    expect(d.positions[0].returnPct).toBeCloseTo((301 / 4435) * 100, 6);
+    expect(d.winners).toBe(1);
+    expect(d.losers).toBe(0);
+  });
+
+  it("counts a short's exposure in the book return rather than netting it", () => {
+    const short = {
+      ...pos("VGLT", -50, -100),
+      costBasis: -100,
+      unrealizedGain: 10,
+    } as HoldingValuation;
+    const d = returnDistribution([pos("LONG", 110, 100), short]);
+    // Capital at risk is 200, not the 0 a signed sum would give.
+    expect(d.weightedPct).toBeCloseTo((20 / 200) * 100, 6);
+  });
+});
+
+describe("maturityLadder units", () => {
+  it("counts face only where there is a face, not ETF share counts", () => {
+    const rows = maturityLadder([
+      pos("BOND", 10_000, 10_000, { maturity: "2031-06-30", quantity: 10_000 }),
+      // An ETF: 4,288 is a share count, and adding it to face dollars would
+      // put the whole sleeve in at $4,288.
+      pos("VMBS", 202_000, 202_000, { maturity: null, quantity: 4_288 }),
+    ]);
+    const dated = rows.filter((r) => r.year !== null);
+    expect(dated.reduce((s, r) => s + r.face, 0)).toBe(10_000);
+    const undated = rows.find((r) => r.year === null);
+    expect(undated?.face).toBe(0);
+    // Market value still reflects the ETF, which is the honest comparison.
+    expect(undated?.marketValue).toBe(202_000);
+  });
+});
