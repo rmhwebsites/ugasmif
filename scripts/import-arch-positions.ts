@@ -46,6 +46,9 @@ interface Position {
   ytm: number | null;
   inflation_factor: number | null;
   issuer?: string | null;
+  /** The PM's current price, when their market-data add-in was live on save. */
+  price_now?: number | null;
+  accrued_now?: number | null;
   notes?: string | null;
   src: string;
 }
@@ -237,6 +240,66 @@ async function main() {
     closed = goneIds.length;
   }
 
+  // The workbook's own current prices become bond marks. Bonds have no live
+  // quote in this app, so without a mark every corporate, agency and TIPS
+  // shows at cost. ETFs are left alone — Yahoo is fresher than a saved file.
+  const { data: markedBy } = await db
+    .from("profiles")
+    .select("id")
+    .eq("is_app_admin", true)
+    .limit(1)
+    .maybeSingle();
+
+  let marks = 0;
+  if (markedBy) {
+    const { data: after } = await db
+      .from("holdings")
+      .select("id, instrument_type, cusip, symbol")
+      .eq("fund_id", fund.id)
+      .eq("is_active", true);
+    const idByKey = new Map((after ?? []).map((h) => [key(h), h.id]));
+
+    // Only mark what actually moved. A mark is a dated record the PM reads as
+    // history, so re-running the same workbook must not stack a second copy of
+    // every price on top of the first.
+    const { data: priorMarks } = await db
+      .from("bond_marks")
+      .select("holding_id, clean_price, marked_at")
+      .in("holding_id", [...idByKey.values()])
+      .order("marked_at", { ascending: false });
+    const latest = new Map<string, number>();
+    for (const m of priorMarks ?? []) {
+      if (!latest.has(m.holding_id)) latest.set(m.holding_id, Number(m.clean_price));
+    }
+
+    const markRows = positions
+      .filter((p) => BOND_TYPES.has(p.instrument_type) && p.price_now != null)
+      .map((p) => ({
+        holding_id: idByKey.get(
+          `${p.instrument_type}:${(p.cusip ?? p.symbol ?? "").toUpperCase()}`
+        ),
+        clean_price: p.price_now as number,
+        ytm: p.ytm,
+        duration: p.duration,
+        source: "other" as const,
+        marked_by: markedBy.id,
+        notes: `Price from the Arch PM workbook ${p.src}`,
+      }))
+      .filter((m) => {
+        if (!m.holding_id) return false;
+        const was = latest.get(m.holding_id);
+        // Prices are quoted to four decimals; anything inside that is the
+        // same mark re-read, not a new one.
+        return was === undefined || Math.abs(was - m.clean_price) > 1e-4;
+      });
+
+    if (markRows.length > 0) {
+      const { error } = await db.from("bond_marks").insert(markRows);
+      if (error) throw error;
+      marks = markRows.length;
+    }
+  }
+
   // The workbook accounts for every dollar as a position, and its cash is the
   // sweep. A separate balance on the fund would be counted on top of it.
   const sweep = positions.find((p) => p.instrument_type === "money_market");
@@ -257,6 +320,7 @@ async function main() {
   );
   console.log(
     `\n  ${updates.length} updated, ${inserts.length} new, ${closed} closed` +
+      `\n  ${marks} new bond mark${marks === 1 ? "" : "s"} from the workbook's prices` +
       `\n  ${rows.length} positions into ${fund.name}` +
       `\n  ${bonds.length} individual bonds, ${rows.length - bonds.length} funds and cash` +
       `\n  cost basis $${cost.toLocaleString("en-US", { maximumFractionDigits: 0 })}`

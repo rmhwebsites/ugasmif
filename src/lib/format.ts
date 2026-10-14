@@ -65,8 +65,24 @@ export function formatNumber(
   }).format(value);
 }
 
+/** A bare calendar date out of Postgres: '2026-08-17', no time, no zone. */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return "—";
+  if (typeof value === "string" && DATE_ONLY.test(value)) {
+    // A date column has no instant in it, so there is nothing to convert.
+    // new Date('2026-08-17') is UTC midnight, and rendering that in Eastern
+    // moves it back a day: a Monday class meeting shows as Sunday, and a bond
+    // maturing on the 1st shows as maturing on the last of the month before.
+    const [y, m, d] = value.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  }
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-US", {
@@ -79,6 +95,9 @@ export function formatDate(value: string | Date | null | undefined): string {
 
 export function formatDateTime(value: string | Date | null | undefined): string {
   if (!value) return "—";
+  // A bare date has no time to show; rendering one here would invent 8:00 PM
+  // out of the zone conversion.
+  if (typeof value === "string" && DATE_ONLY.test(value)) return formatDate(value);
   const d = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-US", {

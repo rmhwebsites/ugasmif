@@ -151,6 +151,14 @@ Two steps:
    the holdings wholesale: the workbook is the book of record, so a position
    missing from it has been sold.
 
+When the PM's market-data add-in is working at save time the workbook also
+carries current prices, and the import records them as bond marks. That matters
+because bonds have no live quote in this app: without a mark every corporate,
+agency and TIPS shows at cost. Marks are only written where the price actually
+moved, so re-running the same file does not stack a second copy of every price
+on top of the first. ETFs are left to quote live from Yahoo, which is fresher
+than a saved file.
+
 **The positions file is not in this repository.** It is a real portfolio and
 this repo is public. Keep it on your own machine and pass it by path.
 
@@ -164,6 +172,23 @@ guess:
 - **Short positions** (the fund runs a short VGLT leg against long VGSH/VGIT)
   carry a negative quantity. They price and total correctly, and show a
   negative weight, which is what a short is.
+
+## Loading the semester calendar
+
+The PM keeps the class schedule in a spreadsheet, one row per week: a session
+number, the date, what the session is, and their own to-dos. A small extractor
+turns it into `{meeting_date, title, notes}` and then:
+
+    npm run import-meetings -- arch path/to/meetings.json
+
+Matched on date, so re-importing a revised calendar moves titles around rather
+than duplicating the term. A date the new calendar drops is removed only if
+nobody has taken attendance against it — a session that happened is a record,
+not a plan, and `meeting_attendance` cascades on delete.
+
+Non-teaching weeks (Labor Day) are kept. They explain the gap in the schedule
+and cost nothing: the attendance rate counts only meetings where attendance was
+actually taken, so a row nobody marked is left out of everyone's percentage.
 
 ## Backups
 

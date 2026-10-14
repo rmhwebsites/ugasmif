@@ -15,6 +15,7 @@
     "seed": "tsx scripts/seed.ts",
     "demo-logins": "tsx scripts/demo-logins.ts",
     "import-arch": "tsx scripts/import-arch-positions.ts",
+    "import-meetings": "tsx scripts/import-meetings.ts",
     "export-roster": "tsx scripts/export-roster.ts",
     "migrate": "node scripts/apply-migrations.mjs",
     "gen-types": "supabase gen types typescript --project-id ${SUPABASE_PROJECT_REF:-ucvmssmmnzltwzrdybko} --schema public > src/types/database.ts"
