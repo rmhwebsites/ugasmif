@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { SmifLogo } from "@/components/icons/SmifLogo";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { ThemeSelector } from "@/components/layout/ThemeSelector";
 import { useMobileNav } from "@/components/layout/MobileNav";
 import type { FundSlug } from "@/types/domain";
 
@@ -172,6 +173,9 @@ export function Sidebar({
             <LogOut className="h-4 w-4 shrink-0" />
             Sign out
           </LogoutButton>
+        </div>
+        <div className="mt-2 px-1">
+          <ThemeSelector />
         </div>
       </div>
     </nav>

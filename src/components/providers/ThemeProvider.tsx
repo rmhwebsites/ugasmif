@@ -40,10 +40,13 @@ function systemTheme(): ResolvedTheme {
 
 function applyTheme(resolved: ResolvedTheme) {
   document.documentElement.dataset.theme = resolved;
-  // Keep the browser chrome / iOS status bar in sync
+  // Keep the browser chrome / iOS status bar in sync. There is one tag per
+  // colour scheme, and the browser uses whichever matches the DEVICE — so an
+  // explicit Light or Dark has to rewrite every one of them, or a dark choice
+  // on a light-mode phone keeps a light status bar.
   document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", THEME_COLORS[resolved]);
+    .querySelectorAll('meta[name="theme-color"]')
+    .forEach((m) => m.setAttribute("content", THEME_COLORS[resolved]));
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

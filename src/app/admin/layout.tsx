@@ -4,7 +4,6 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getAuthState } from "@/lib/fund";
 import { SmifLogo } from "@/components/icons/SmifLogo";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 
 export default async function AppAdminLayout({
@@ -26,7 +25,6 @@ export default async function AppAdminLayout({
           </span>
         </Link>
         <div className="flex shrink-0 items-center gap-2">
-          <ThemeToggle />
           <LogoutButton />
         </div>
       </header>

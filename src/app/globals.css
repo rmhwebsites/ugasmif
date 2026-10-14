@@ -208,3 +208,10 @@ body,
     opacity: 0.45;
   }
 }
+
+/* The floating theme selector serves pages with no sidebar (login, onboarding,
+   app admin). Fund pages carry their own in the sidebar footer, so the
+   floating copy steps aside wherever the fund chrome is on the page. */
+body:has([data-fund]) .theme-floating {
+  display: none;
+}

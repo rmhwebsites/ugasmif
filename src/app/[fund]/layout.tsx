@@ -11,7 +11,6 @@ import {
   MobileNavToggle,
 } from "@/components/layout/MobileNav";
 import { FundSwitcher } from "@/components/layout/FundSwitcher";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { FundCookie } from "@/components/layout/FundCookie";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import type { FundSlug } from "@/types/domain";
@@ -64,7 +63,6 @@ export default async function FundLayout({
             current={ctx.fund.slug}
             accessible={accessible.map((f) => f.slug as FundSlug)}
           />
-          <ThemeToggle />
           {/* Wrapped, not class-toggled: Button's own inline-flex would
               fight a `hidden` on the same element. Below lg the drawer
               carries Sign out, which keeps room for the Menu button. */}

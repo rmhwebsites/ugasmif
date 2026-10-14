@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { ThemeSelector } from "@/components/layout/ThemeSelector";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import "./globals.css";
 
@@ -32,7 +33,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0b0d",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8f6f2" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b0d" },
+  ],
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -45,7 +49,12 @@ export default function RootLayout({
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Script src="/theme-init.js" strategy="beforeInteractive" />
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+          {/* Bottom-left on every page that has no sidebar to hold it.
+              globals.css hides this copy wherever the fund chrome is shown. */}
+          <ThemeSelector variant="floating" />
+        </ThemeProvider>
         <ServiceWorkerRegistration />
       </body>
     </html>
