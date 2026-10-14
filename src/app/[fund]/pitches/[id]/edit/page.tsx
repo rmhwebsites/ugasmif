@@ -1,24 +1,35 @@
 // /[fund]/pitches/[id]/edit — pitch editor in edit mode with autosave and
 // file uploads (SPEC Section 12). Editable by the author while draft, the
 // sector leader through submitted, and officers until voting opens; anyone
-// else lands back on the pitch page.
+// else lands back on the pitch page. Whoever may submit the draft gets
+// "Submit for scheduling" right in the editor.
 
-import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { getAuthState, getFundContext } from "@/lib/fund";
-import { isOfficer, leadsSector } from "@/lib/permissions";
+import { can, isOfficer, leadsSector } from "@/lib/permissions";
 import { PitchStatusBadge } from "@/components/ui/Badge";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   PitchEditor,
   type EditorHolding,
   type EditorPitchOption,
   type EditorSector,
 } from "@/components/pitch/PitchEditor";
-import type { Pitch, PitchFile } from "@/types/domain";
+import type { PitchFile } from "@/types/domain";
+import { isPitchId, loadPitch } from "../load-pitch";
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ fund: string; id: string }>;
+}): Promise<Metadata> {
+  const { fund: slug, id } = await params;
+  const ctx = await getFundContext(slug);
+  if (!ctx) return {};
+  const pitch = await loadPitch(ctx.fund.id, id);
+  return pitch ? { title: `Edit ${pitch.title}` } : {};
+}
 
 export default async function EditPitchPage({
   params,
@@ -28,17 +39,11 @@ export default async function EditPitchPage({
   const { fund: slug, id } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
-  if (!UUID_RE.test(id)) notFound();
+  if (!isPitchId(id)) notFound();
 
   const { supabase, user } = await getAuthState();
-  const { data: pitchRow } = await supabase
-    .from("pitches")
-    .select("*")
-    .eq("id", id)
-    .eq("fund_id", ctx.fund.id)
-    .maybeSingle();
-  if (!pitchRow) notFound();
-  const pitch = pitchRow as Pitch;
+  const pitch = await loadPitch(ctx.fund.id, id);
+  if (!pitch) notFound();
 
   const editable = isOfficer(ctx)
     ? ["draft", "submitted", "scheduled"].includes(pitch.status)
@@ -76,21 +81,16 @@ export default async function EditPitchPage({
 
   return (
     <div className="space-y-4">
-      <div>
-        <Link
-          href={`/${slug}/pitches/${id}`}
-          className="inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Pitch page
-        </Link>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Edit pitch</h1>
-          <PitchStatusBadge status={pitch.status} />
-        </div>
-        <p className="text-xs text-muted sm:text-sm">
-          Changes autosave a few seconds after you stop typing.
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: `/${slug}/pitches/${id}`, label: pitch.title }}
+        title="Edit pitch"
+        description={
+          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <PitchStatusBadge status={pitch.status} />
+            Changes save a few seconds after you stop typing.
+          </span>
+        }
+      />
 
       <PitchEditor
         fund={slug}
@@ -100,6 +100,11 @@ export default async function EditPitchPage({
         sectors={(sectorsRes.data as EditorSector[] | null) ?? []}
         defaultSectorId={pitch.sector_id}
         canPickAnySector={isOfficer(ctx) || ctx.isAppAdmin}
+        canSubmit={
+          pitch.status === "draft" &&
+          can(ctx, "submit_pitch", { sectorId: pitch.sector_id })
+        }
+        canSetTargets={can(ctx, "set_sector_targets")}
         holdings={(holdingsRes.data as EditorHolding[] | null) ?? []}
         pitchOptions={(pitchesRes.data as EditorPitchOption[] | null) ?? []}
         isFixedIncome={ctx.fund.asset_class === "fixed_income"}

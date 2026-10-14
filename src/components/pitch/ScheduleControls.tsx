@@ -139,7 +139,7 @@ export function ScheduleControls({
                   onClick={() => setDate(d)}
                   className={`rounded-full px-2 py-0.5 text-[11px] transition-colors ${
                     date === d
-                      ? "bg-accent text-white"
+                      ? "bg-accent text-on-accent"
                       : "bg-highlight text-muted hover:text-foreground"
                   }`}
                 >

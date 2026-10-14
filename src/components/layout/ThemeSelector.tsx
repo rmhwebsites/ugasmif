@@ -73,7 +73,7 @@ export function ThemeSelector({
             data-mode={value}
             onClick={() => setMode(value)}
             title={value === "auto" ? "Match your device" : `${label} theme`}
-            className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+            className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-text ${
               floating ? "p-2" : "flex-1 px-1.5 py-1.5"
             } ${
               active

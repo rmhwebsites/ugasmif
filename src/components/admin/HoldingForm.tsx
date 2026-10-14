@@ -35,21 +35,34 @@ const inputClass =
   "w-full rounded-lg border border-input-border bg-input-bg px-3 py-2 text-sm outline-none transition-colors focus:border-accent";
 const labelClass = "mb-1 block text-xs font-medium text-muted";
 
+/** The pricing a new holding of this type starts with. */
+function defaultPricing(type: string): Holding["pricing_method"] {
+  return type === "treasury"
+    ? "treasury_curve"
+    : ["equity", "etf", "money_market"].includes(type)
+    ? "live"
+    : "manual";
+}
+
 export function HoldingForm({
   fund,
   sectors,
   holding,
+  defaultInstrument = "equity",
   onDone,
 }: {
   fund: string;
   sectors: Pick<Sector, "id" | "name">[];
   /** present = edit mode */
   holding?: Holding;
+  /** A new holding's starting type: treasury in a bond fund, equity otherwise. */
+  defaultInstrument?: InstrumentType;
   onDone?: () => void;
 }) {
   const router = useRouter();
+  const startType = holding?.instrument_type ?? defaultInstrument;
   const [form, setForm] = useState({
-    instrument_type: (holding?.instrument_type ?? "equity") as InstrumentType,
+    instrument_type: startType as InstrumentType,
     symbol: holding?.symbol ?? "",
     cusip: holding?.cusip ?? "",
     name: holding?.name ?? "",
@@ -60,11 +73,17 @@ export function HoldingForm({
     coupon_rate: holding?.coupon_rate?.toString() ?? "",
     maturity_date: holding?.maturity_date ?? "",
     payment_frequency: holding?.payment_frequency?.toString() ?? "2",
-    day_count: holding?.day_count ?? "",
+    day_count:
+      holding?.day_count ??
+      (holding || !BOND_TYPES.includes(startType)
+        ? ""
+        : startType === "treasury"
+        ? "ACT/ACT"
+        : "30/360"),
     rating: holding?.rating ?? "",
     duration: holding?.duration?.toString() ?? "",
     ytm: holding?.ytm?.toString() ?? "",
-    pricing_method: holding?.pricing_method ?? "live",
+    pricing_method: holding?.pricing_method ?? defaultPricing(startType),
     benchmark_tenor: holding?.benchmark_tenor?.toString() ?? "",
     opened_on: holding?.opened_on ?? "",
     notes: holding?.notes ?? "",
@@ -85,12 +104,7 @@ export function HoldingForm({
         }
       }
       if (field === "instrument_type") {
-        next.pricing_method =
-          value === "treasury"
-            ? "treasury_curve"
-            : ["equity", "etf", "money_market"].includes(value)
-            ? "live"
-            : "manual";
+        next.pricing_method = defaultPricing(value);
         if (BOND_TYPES.includes(value as InstrumentType) && !f.day_count) {
           next.day_count = value === "treasury" ? "ACT/ACT" : "30/360";
         }
@@ -239,9 +253,9 @@ export function HoldingForm({
           onChange={(e) => set("pricing_method", e.target.value)}
           className={inputClass}
         >
-          <option value="live">live (Yahoo)</option>
-          <option value="treasury_curve">treasury curve</option>
-          <option value="manual">manual marks</option>
+          <option value="live">Live (Yahoo quote)</option>
+          <option value="treasury_curve">Curve (Treasury par yields)</option>
+          <option value="manual">Manual mark</option>
         </select>
       </div>
       <div>

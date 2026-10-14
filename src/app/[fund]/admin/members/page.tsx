@@ -1,7 +1,7 @@
 // /[fund]/admin/members — roster table, add one member, CSV import/export
 // (SPEC 11.3, 17.1). Roster managers only (the PM is excluded by the matrix).
+// #add-member and #roster-import are the two forms below the table.
 
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { can, hasFundAdminAccess } from "@/lib/permissions";
@@ -13,9 +13,11 @@ import {
 } from "@/components/admin/MemberEditor";
 import { RosterImport } from "@/components/admin/RosterImport";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { LinkButton, PageHeader, ViewLink } from "@/components/ui/PageHeader";
 import type { Sector } from "@/types/domain";
+import { adminTitle } from "../admin-metadata";
 
-export const metadata: Metadata = { title: "Members" };
+export const generateMetadata = adminTitle("members", "Manage members");
 
 export default async function MembersAdminPage({
   params,
@@ -28,13 +30,17 @@ export default async function MembersAdminPage({
 
   if (!hasFundAdminAccess(ctx)) notFound();
 
+  const viewTeam = (
+    <ViewLink href={`/${ctx.fund.slug}/team`}>View team</ViewLink>
+  );
+
   if (!can(ctx, "manage_roster")) {
     return (
-      <div className="glass-card p-8 text-center">
-        <p className="font-medium">Roster management</p>
-        <p className="mt-1 text-sm text-muted">
-          The president, vice president, alumni relations director, and app
-          admins manage the roster. See the team page for the current roster.
+      <div className="space-y-4 sm:space-y-6">
+        <PageHeader title="Manage members" actions={viewTeam} />
+        <p className="glass-card p-6 text-sm text-muted">
+          The president, vice president, director of alumni relations, and
+          app admins manage members.
         </p>
       </div>
     );
@@ -44,7 +50,7 @@ export default async function MembersAdminPage({
   const [membersRes, sectorsRes] = await Promise.all([
     supabase
       .from("memberships")
-      .select("*, profiles(id, full_name, email)")
+      .select("*, profiles(id, full_name, email, onboarded_at)")
       .eq("fund_id", ctx.fund.id)
       .eq("academic_year_id", ctx.currentYear.id)
       .order("role"),
@@ -61,20 +67,25 @@ export default async function MembersAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Members</h1>
-          <p className="mt-0.5 text-sm text-muted">
-            {ctx.currentYear.label} · {members.length} on the roster
-          </p>
-        </div>
-        <a
-          href={`/api/${ctx.fund.slug}/roster/export`}
-          className="rounded-lg border border-input-border bg-input-bg px-4 py-2 text-sm font-medium transition-colors hover:bg-highlight"
-        >
-          Export CSV
-        </a>
-      </div>
+      <PageHeader
+        title="Manage members"
+        description={`${ctx.currentYear.label} · ${members.length} ${members.length === 1 ? "member" : "members"}`}
+        actions={
+          <>
+            {viewTeam}
+            <LinkButton href="#add-member">Add a member</LinkButton>
+            <LinkButton href="#roster-import" variant="secondary">
+              Import roster
+            </LinkButton>
+            <a
+              href={`/api/${ctx.fund.slug}/roster/export`}
+              className="inline-flex items-center rounded-lg bg-highlight px-3.5 py-2 text-sm font-medium whitespace-nowrap transition-colors hover:bg-card-border"
+            >
+              Export CSV
+            </a>
+          </>
+        }
+      />
 
       <MemberEditor
         fund={ctx.fund.slug}
@@ -82,19 +93,23 @@ export default async function MembersAdminPage({
         sectors={sectors}
       />
 
-      <Card>
-        <CardHeader title="Add a member" />
-        <div className="p-4 sm:p-6">
-          <AddMemberForm fund={ctx.fund.slug} sectors={sectors} />
-        </div>
-      </Card>
+      <section id="add-member" className="scroll-mt-20 lg:scroll-mt-6">
+        <Card>
+          <CardHeader title="Add a member" />
+          <div className="p-4 sm:p-6">
+            <AddMemberForm fund={ctx.fund.slug} sectors={sectors} />
+          </div>
+        </Card>
+      </section>
 
-      <Card>
-        <CardHeader title="Roster import" />
-        <div className="p-4 sm:p-6">
-          <RosterImport fund={ctx.fund.slug} />
-        </div>
-      </Card>
+      <section id="roster-import" className="scroll-mt-20 lg:scroll-mt-6">
+        <Card>
+          <CardHeader title="Roster import" />
+          <div className="p-4 sm:p-6">
+            <RosterImport fund={ctx.fund.slug} />
+          </div>
+        </Card>
+      </section>
     </div>
   );
 }

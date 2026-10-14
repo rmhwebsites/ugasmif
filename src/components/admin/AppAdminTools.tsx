@@ -1,8 +1,13 @@
 "use client";
 
 // Cross-fund user flags + the environment health panel (SPEC 11.3 /admin).
+//
+// Each person's name and memberships open their record in that fund's
+// Manage members, where role, sector and sign-in help live. On a phone the
+// flag checkboxes stack under the name, so the table never runs off-screen.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
@@ -12,13 +17,49 @@ import {
   type SortableColumn,
 } from "@/components/ui/SortableTable";
 
+export interface AdminMembership {
+  id: string;
+  /** Fund and year, e.g. "Athena 2026-27". */
+  label: string;
+  /** roleLabel(), e.g. "Portfolio Manager". */
+  role: string;
+  alumni: boolean;
+  /** This membership's record in the fund's Manage members. */
+  href: string;
+}
+
 export interface AdminUserRow {
   id: string;
   email: string;
   full_name: string;
   is_app_admin: boolean;
   is_faculty_advisor: boolean;
-  memberships: string[];
+  /** Their member record: in the first fund they belong to, else the first fund. */
+  href: string;
+  memberships: AdminMembership[];
+}
+
+type Flag = "is_app_admin" | "is_faculty_advisor";
+
+function MembershipList({ memberships }: { memberships: AdminMembership[] }) {
+  if (memberships.length === 0) {
+    return <span className="text-muted">No fund membership</span>;
+  }
+  return (
+    <ul className="space-y-0.5">
+      {memberships.map((m) => (
+        <li key={m.id} className="flex flex-wrap items-center gap-1.5">
+          <Link
+            href={m.href}
+            className="text-muted transition-colors hover:text-accent-text hover:underline"
+          >
+            {m.label} · {m.role}
+          </Link>
+          {m.alumni && <Badge>alumni</Badge>}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 const USER_HEADERS: { key: string; label: string; align?: "center" }[] = [
@@ -52,11 +93,7 @@ export function UsersTable({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
-  async function setFlag(
-    userId: string,
-    flag: "is_app_admin" | "is_faculty_advisor",
-    value: boolean
-  ) {
+  async function setFlag(userId: string, flag: Flag, value: boolean) {
     setBusyId(userId);
     setError(null);
     const res = await fetch("/api/admin/users", {
@@ -86,6 +123,26 @@ export function UsersTable({
     dir: "asc",
   });
 
+  // The same checkbox in its table column and, on a phone, under the name.
+  function flagBox(u: AdminUserRow, flag: Flag) {
+    const isAdminFlag = flag === "is_app_admin";
+    const ownAdmin = isAdminFlag && u.id === currentUserId && u.is_app_admin;
+    return (
+      <input
+        type="checkbox"
+        checked={u[flag]}
+        disabled={ownAdmin}
+        title={ownAdmin ? "You can't remove your own admin flag." : undefined}
+        onChange={(e) => setFlag(u.id, flag, e.target.checked)}
+        aria-label={
+          isAdminFlag
+            ? `${u.full_name} is an app admin`
+            : `${u.full_name} is the faculty advisor`
+        }
+      />
+    );
+  }
+
   return (
     <div className="space-y-2">
       <input
@@ -97,7 +154,7 @@ export function UsersTable({
       {error && <p className="text-sm text-loss">{error}</p>}
       <div className="glass-card overflow-hidden">
         <div className="max-h-[32rem] overflow-auto">
-          <table className="w-full text-sm" style={{ minWidth: 640 }}>
+          <table className="w-full text-sm sm:min-w-[640px]">
             <thead className="sticky top-0 bg-sticky-card">
               <tr className="border-b border-card-border text-left text-xs text-muted">
                 {USER_HEADERS.map((head, i) => (
@@ -112,7 +169,9 @@ export function UsersTable({
                         : undefined
                     }
                     className={`py-2.5 font-medium ${
-                      i === 0 ? "sticky left-0 z-10 bg-sticky-card px-4" : "px-3"
+                      i === 0
+                        ? "sticky left-0 z-10 bg-sticky-card px-4"
+                        : "hidden px-3 sm:table-cell"
                     } ${head.align === "center" ? "text-center" : "text-left"}`}
                   >
                     <SortButton
@@ -134,39 +193,35 @@ export function UsersTable({
                   }`}
                 >
                   <td className="sticky left-0 z-10 bg-sticky-card px-4 py-2.5">
-                    <p className="font-medium">{u.full_name}</p>
-                    <p className="text-xs text-muted">{u.email}</p>
+                    <Link
+                      href={u.href}
+                      className="font-medium transition-colors hover:text-accent-text hover:underline"
+                    >
+                      {u.full_name}
+                    </Link>
+                    <p className="text-xs break-words text-muted">{u.email}</p>
+                    <div className="mt-1.5 space-y-2 text-xs sm:hidden">
+                      <MembershipList memberships={u.memberships} />
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        <label className="inline-flex items-center gap-1.5">
+                          {flagBox(u, "is_app_admin")}
+                          App admin
+                        </label>
+                        <label className="inline-flex items-center gap-1.5">
+                          {flagBox(u, "is_faculty_advisor")}
+                          Advisor
+                        </label>
+                      </div>
+                    </div>
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-muted">
-                    {u.memberships.length > 0
-                      ? u.memberships.join(", ")
-                      : "none"}
+                  <td className="hidden px-3 py-2.5 text-xs sm:table-cell">
+                    <MembershipList memberships={u.memberships} />
                   </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <input
-                      type="checkbox"
-                      checked={u.is_app_admin}
-                      disabled={u.id === currentUserId && u.is_app_admin}
-                      title={
-                        u.id === currentUserId && u.is_app_admin
-                          ? "You can't remove your own admin flag."
-                          : undefined
-                      }
-                      onChange={(e) =>
-                        setFlag(u.id, "is_app_admin", e.target.checked)
-                      }
-                      aria-label={`${u.full_name} is an app admin`}
-                    />
+                  <td className="hidden px-3 py-2.5 text-center sm:table-cell">
+                    {flagBox(u, "is_app_admin")}
                   </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <input
-                      type="checkbox"
-                      checked={u.is_faculty_advisor}
-                      onChange={(e) =>
-                        setFlag(u.id, "is_faculty_advisor", e.target.checked)
-                      }
-                      aria-label={`${u.full_name} is the faculty advisor`}
-                    />
+                  <td className="hidden px-3 py-2.5 text-center sm:table-cell">
+                    {flagBox(u, "is_faculty_advisor")}
                   </td>
                 </tr>
               ))}

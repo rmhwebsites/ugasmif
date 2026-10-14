@@ -3,10 +3,12 @@
 // Dashboard value chart card: fetches /api/[fund]/portfolio/history for the
 // selected period (1M / 3M / YTD / 1Y / All), overlays the benchmark rebased
 // to the fund's starting value, and shows a hover readout via the chart's
-// crosshair callback (GBH PortfolioSummary pattern, without SWR).
+// crosshair callback (GBH PortfolioSummary pattern, without SWR). The card
+// is a summary of Performance, so its corner links there.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TrendingDown, TrendingUp } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
 import { ValueChart } from "@/components/charts/ValueChart";
 import { SmifSpinner } from "@/components/ui/SmifSpinner";
 import {
@@ -171,21 +173,30 @@ export function DashboardCharts({
               <span className="text-sm text-muted">{displayLabel}</span>
             </div>
           </div>
-          <div className="flex items-center gap-1 sm:gap-1.5">
-            {PERIODS.map((p) => (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => setPeriod(p.value)}
-                className={`cursor-pointer rounded-full px-2.5 py-1 text-xs font-medium transition-colors sm:px-3 ${
-                  period === p.value
-                    ? "bg-accent-soft text-accent"
-                    : "text-muted hover:text-foreground"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPeriod(p.value)}
+                  className={`relative cursor-pointer rounded-full px-2.5 py-1 text-xs font-medium transition-colors after:absolute after:-inset-x-0.5 after:-inset-y-2 sm:px-3 sm:after:hidden ${
+                    period === p.value
+                      ? "bg-accent-soft text-accent-text"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <Link
+              href={`/${fund}/performance`}
+              className="-my-2.5 inline-flex items-center gap-0.5 py-2.5 text-sm font-medium text-accent-text hover:underline sm:my-0 sm:py-0"
+            >
+              Performance
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
           </div>
         </div>
       </div>
@@ -194,7 +205,7 @@ export function DashboardCharts({
         {failed ? (
           <div className="flex h-[160px] items-center justify-center sm:h-[200px]">
             <p className="text-xs text-muted">
-              Could not load the chart — reload the page to retry.
+              Could not load the chart. Reload the page to try again.
             </p>
           </div>
         ) : points === null ? (
@@ -204,7 +215,7 @@ export function DashboardCharts({
         ) : points.length === 0 ? (
           <div className="flex h-[160px] items-center justify-center px-6 text-center sm:h-[200px]">
             <p className="text-xs text-muted">
-              No snapshots in this range yet — the chart fills in after the
+              No snapshots in this range yet. The chart fills in after the
               nightly snapshot runs on trading days.
             </p>
           </div>

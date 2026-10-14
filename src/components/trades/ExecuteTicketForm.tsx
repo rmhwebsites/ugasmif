@@ -127,7 +127,7 @@ export function ExecuteTicketForm({
       setDone(kind === "execute" ? "Trade executed." : "Ticket cancelled.");
       router.refresh();
     } catch {
-      setError("Network error — the request did not go through.");
+      setError("Network error. The request did not go through.");
     } finally {
       setBusy(null);
     }
@@ -361,7 +361,7 @@ export function ExecuteTicketForm({
             {bond
               ? formatCurrencyWhole(holdingQuantity)
               : formatNumber(holdingQuantity, 2)}
-            ) — the execution will be rejected.
+            ), so the execution will be rejected.
           </p>
         )}
         {preview && preview.cashAfter < 0 && !preview.oversell && (

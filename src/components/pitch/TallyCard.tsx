@@ -105,7 +105,7 @@ export function TallyCard({
                   <Icon className={`h-4 w-4 ${row.textColor}`} />
                   <span className="text-sm font-medium">{row.label}</span>
                   {myChoice === row.choice && (
-                    <span className="text-[10px] text-accent">(your vote)</span>
+                    <span className="text-[10px] text-accent-text">(your vote)</span>
                   )}
                 </div>
                 <span className={`text-sm font-semibold tabular-nums ${row.textColor}`}>

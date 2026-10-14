@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { SmifLogo } from "@/components/icons/SmifLogo";
 import { Button } from "@/components/ui/Button";
+import { safeNextPath } from "@/app/auth/next-path";
 
 function LoginForm() {
   const router = useRouter();
@@ -14,7 +15,11 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [forgotMode, setForgotMode] = useState(false);
+  // /auth/confirm sends a used or lapsed email link here. The person may
+  // never have had a password (an invite), so start on "send a new link".
+  const linkExpired = searchParams.get("error") === "link-expired";
+  const [forgotMode, setForgotMode] = useState(linkExpired);
+  const [showExpired, setShowExpired] = useState(linkExpired);
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -34,8 +39,7 @@ function LoginForm() {
       );
       return;
     }
-    const next = searchParams.get("next");
-    router.push(next && next.startsWith("/") ? next : "/");
+    router.push(safeNextPath(searchParams.get("next")));
     router.refresh();
   }
 
@@ -54,7 +58,9 @@ function LoginForm() {
       return;
     }
     setNotice(
-      "If that address is on the roster, a reset link is on its way. Check your inbox."
+      showExpired
+        ? "If that address is on the roster, a new link is on its way. Check your inbox."
+        : "If that address is on the roster, a reset link is on its way. Check your inbox."
     );
   }
 
@@ -69,6 +75,25 @@ function LoginForm() {
           </p>
         </div>
 
+        {showExpired && (
+          <div className="mb-5 rounded-lg bg-highlight px-3 py-2.5 text-sm">
+            <p className="font-medium">
+              That link has expired or was already used.
+            </p>
+            <p className="mt-1 text-muted">
+              Links in SMIF Hub emails work once. Enter your UGA email and
+              we&apos;ll send a new one, whether you were setting up your
+              account or resetting your password.
+            </p>
+          </div>
+        )}
+        {forgotMode && !showExpired && (
+          <p className="mb-4 text-sm text-muted">
+            Enter your UGA email and we&apos;ll send a link to choose a new
+            password.
+          </p>
+        )}
+
         <form onSubmit={forgotMode ? handleForgot : handleSignIn}>
           <label className="mb-1 block text-xs font-medium text-muted">
             UGA email
@@ -76,6 +101,7 @@ function LoginForm() {
           <input
             type="email"
             required
+            autoFocus={linkExpired}
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -107,7 +133,9 @@ function LoginForm() {
             {loading
               ? "One moment…"
               : forgotMode
-              ? "Send reset link"
+              ? showExpired
+                ? "Send a new link"
+                : "Send reset link"
               : "Sign in"}
           </Button>
         </form>
@@ -116,6 +144,7 @@ function LoginForm() {
           type="button"
           onClick={() => {
             setForgotMode(!forgotMode);
+            setShowExpired(false);
             setError(null);
             setNotice(null);
           }}
@@ -123,6 +152,13 @@ function LoginForm() {
         >
           {forgotMode ? "Back to sign in" : "Forgot password?"}
         </button>
+
+        {forgotMode && (
+          <p className="mt-4 text-center text-xs text-muted">
+            No email after a few minutes? Ask a SMIF officer. They can resend
+            your invite or set a temporary password for you.
+          </p>
+        )}
       </div>
     </main>
   );

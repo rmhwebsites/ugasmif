@@ -21,7 +21,7 @@
 //      bond, a symbol the provider has never heard of. Those fall back to the
 //      ticker's first two characters, which reads better than a broken image.
 
-import { useState, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 
 const SIZES = {
   sm: { box: "h-5 w-5", text: "text-[8px]", px: 20 },
@@ -82,9 +82,22 @@ export function SecurityLogo({
 }) {
   const [failed, setFailed] = useState(false);
   const [tone, setTone] = useState<Tone>("unknown");
+  const img = useRef<HTMLImageElement>(null);
   const { box, text, px } = SIZES[size];
 
   const ticker = (symbol ?? "").trim().toUpperCase();
+
+  // The <img> is in the server HTML, so a fast answer can arrive before
+  // React hydrates and attaches onLoad/onError. That event is gone: read the
+  // outcome off the element instead, or a missing logo stays a broken image
+  // and a white one never gets its dark tile.
+  useEffect(() => {
+    const el = img.current;
+    if (!el?.complete) return;
+    if (el.naturalWidth === 0) setFailed(true);
+    else setTone(toneOf(el));
+  }, [ticker]);
+
   const initials = ticker.slice(0, 2) || "—";
   const shell = `${box} shrink-0 overflow-hidden rounded-md ${className}`;
 
@@ -110,6 +123,7 @@ export function SecurityLogo({
           optimizer would cost more than it saves. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        ref={img}
         src={`/api/logo/${encodeURIComponent(ticker)}`}
         alt={name ? `${name} logo` : `${ticker} logo`}
         width={px}

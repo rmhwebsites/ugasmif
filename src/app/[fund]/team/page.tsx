@@ -2,14 +2,23 @@
 // (SPEC 11.2). A roster is people, so each group is a swipeable row of cards
 // (picture, name, role) rather than a wall of names. Members who haven't
 // uploaded a photo show the default silhouette.
+//
+// Each sector heading opens the sector, and the viewer's own sector comes
+// right after the officers. For people who manage members, each card opens
+// that member's page in Fund admin.
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { can, roleLabel, OFFICER_ROLES } from "@/lib/permissions";
+import {
+  canOpenAdminSection,
+  roleLabel,
+  OFFICER_ROLES,
+} from "@/lib/permissions";
 import { Badge } from "@/components/ui/Badge";
+import { SectorLink } from "@/components/ui/SectorLink";
 import {
   MemberCarousel,
   type TeamMember,
@@ -28,14 +37,21 @@ type MemberRow = Membership & {
   profiles: Pick<Profile, "full_name" | "email" | "avatar_url"> | null;
 };
 
-/** Rows out of Supabase, into what the carousel renders. */
-function toCards(rows: MemberRow[]): TeamMember[] {
+/**
+ * Rows out of Supabase, into what the carousel renders. `memberHref` turns a
+ * membership id into the card's link, for people who manage members.
+ */
+function toCards(
+  rows: MemberRow[],
+  memberHref: ((membershipId: string) => string) | null
+): TeamMember[] {
   return rows.map((m) => ({
     id: m.id,
     name: m.profiles?.full_name ?? "Unnamed member",
     role: roleLabel(m.role, m.title_override),
     avatarUrl: m.profiles?.avatar_url ?? null,
     isLeader: m.is_sector_leader,
+    href: memberHref ? memberHref(m.id) : undefined,
   }));
 }
 
@@ -80,6 +96,19 @@ export default async function TeamPage({
   const officers = members.filter((m) =>
     OFFICER_ROLES.includes(m.role)
   );
+  const managesMembers = canOpenAdminSection(ctx, "members");
+  const memberHref = managesMembers
+    ? (id: string) => `/${ctx.fund.slug}/admin/members/${id}`
+    : null;
+  // The viewer's own sector first, then the fund's order.
+  const mySectorId =
+    ctx.membership?.status === "active" ? ctx.sector?.id ?? null : null;
+  const orderedSectors = mySectorId
+    ? [
+        ...sectors.filter((s) => s.id === mySectorId),
+        ...sectors.filter((s) => s.id !== mySectorId),
+      ]
+    : sectors;
 
   return (
     <div className="space-y-6">
@@ -87,7 +116,7 @@ export default async function TeamPage({
         title="Team"
         description={`Officers, sector leaders and analysts for ${selectedYear.label}.`}
         actions={
-          can(ctx, "manage_roster") ? (
+          managesMembers ? (
             <ManageLink href={`/${ctx.fund.slug}/admin/members`}>
               Manage members
             </ManageLink>
@@ -104,7 +133,7 @@ export default async function TeamPage({
               }`}
               className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
                 y.id === selectedYear.id
-                  ? "bg-accent-soft font-medium text-accent"
+                  ? "bg-accent-soft font-medium text-accent-text"
                   : "text-muted hover:bg-highlight hover:text-foreground"
               }`}
             >
@@ -125,7 +154,20 @@ export default async function TeamPage({
         <div className="glass-card p-8 text-center">
           <p className="font-medium">No roster for {selectedYear.label}</p>
           <p className="mt-1 text-sm text-muted">
-            Officers import the roster from Fund admin → Members.
+            {managesMembers ? (
+              <>
+                Add this year&apos;s members on{" "}
+                <Link
+                  href={`/${ctx.fund.slug}/admin/members`}
+                  className="font-medium text-accent-text hover:underline"
+                >
+                  Manage members
+                </Link>
+                .
+              </>
+            ) : (
+              "Officers add this year's members."
+            )}
           </p>
         </div>
       ) : (
@@ -138,12 +180,15 @@ export default async function TeamPage({
             {officers.length === 0 ? (
               <p className="text-sm text-muted">No officers recorded.</p>
             ) : (
-              <MemberCarousel members={toCards(officers)} label="Officers" />
+              <MemberCarousel
+                members={toCards(officers, memberHref)}
+                label="Officers"
+              />
             )}
           </section>
 
           {/* Sector groups */}
-          {sectors.map((sector) => {
+          {orderedSectors.map((sector) => {
             const group = members
               .filter((m) => m.sector_id === sector.id)
               .sort(
@@ -153,16 +198,23 @@ export default async function TeamPage({
             if (group.length === 0) return null;
             return (
               <section key={sector.id} className="glass-card p-4 sm:p-6">
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <h2 className="text-base font-semibold sm:text-lg">
-                    {sector.name}
+                    <SectorLink
+                      fund={ctx.fund.slug}
+                      slug={sector.slug}
+                      name={sector.name}
+                    />
                   </h2>
+                  {sector.id === mySectorId && (
+                    <Badge tone="accent">your sector</Badge>
+                  )}
                   {sector.is_strategy_team && (
                     <Badge tone="info">strategy team</Badge>
                   )}
                 </div>
                 <MemberCarousel
-                  members={toCards(group)}
+                  members={toCards(group, memberHref)}
                   label={`${sector.name} team`}
                 />
               </section>

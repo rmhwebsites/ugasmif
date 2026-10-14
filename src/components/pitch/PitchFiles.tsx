@@ -4,6 +4,10 @@
 // viewer instead of only linking out — the deck is the thing you actually
 // read on this page. Everything else keeps the plain download link.
 //
+// Below the lg breakpoint there is no inline viewer: a PDF frame on a phone
+// is a tall box to scroll past (and pushed the page sideways), so there the
+// row opens the file in the phone's own viewer instead.
+//
 // Every link points at /api/[fund]/pitches/[id]/files/[fileId], which signs a
 // storage URL per request and redirects. A viewer left open through a long
 // meeting therefore keeps working, which a one-hour signed URL baked into the
@@ -31,7 +35,7 @@ function isPdf(name: string): boolean {
 }
 
 function KindIcon({ kind }: { kind: PitchFileLink["kind"] }) {
-  const cls = "h-4 w-4 shrink-0 text-accent";
+  const cls = "h-4 w-4 shrink-0 text-accent-text";
   if (kind === "deck") return <FileText className={cls} />;
   if (kind === "model") return <FileSpreadsheet className={cls} />;
   return <Paperclip className={cls} />;
@@ -86,8 +90,25 @@ export function PitchFiles({
           const open = openId === f.id;
           return (
             <li key={f.id}>
+              {previewable && (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-lg bg-highlight px-3 py-2.5 text-sm transition-colors hover:bg-accent-soft lg:hidden"
+                >
+                  <KindIcon kind={f.kind} />
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {f.file_name}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-accent-text">
+                    Open {f.kind === "deck" ? "deck" : "file"}
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </a>
+              )}
               {previewable ? (
-                <div className="flex items-center gap-2 rounded-lg bg-highlight px-3 py-2 text-sm">
+                <div className="hidden items-center gap-2 rounded-lg bg-highlight px-3 py-2 text-sm lg:flex">
                   <button
                     type="button"
                     onClick={() => setOpenId(open ? null : f.id)}
@@ -135,11 +156,13 @@ export function PitchFiles({
               )}
 
               {open && (
-                <PdfFrame
-                  src={href}
-                  name={f.file_name}
-                  onExpand={() => setFullscreenId(f.id)}
-                />
+                <div className="hidden lg:block">
+                  <PdfFrame
+                    src={href}
+                    name={f.file_name}
+                    onExpand={() => setFullscreenId(f.id)}
+                  />
+                </div>
               )}
             </li>
           );
@@ -171,7 +194,7 @@ function PdfFrame({
   if (!inline) {
     return (
       <div className="mt-2 rounded-lg border border-card-border bg-highlight/50 p-4 text-center">
-        <FileText className="mx-auto h-6 w-6 text-accent" />
+        <FileText className="mx-auto h-6 w-6 text-accent-text" />
         <p className="mt-2 text-sm text-muted">
           Your browser doesn&apos;t preview PDFs inline.
         </p>
@@ -179,7 +202,7 @@ function PdfFrame({
           href={src}
           target="_blank"
           rel="noreferrer"
-          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
         >
           <ExternalLink className="h-4 w-4" /> Open {name}
         </a>

@@ -6,20 +6,26 @@
 // picks them up automatically on load).
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
+import { LinkButton } from "@/components/ui/PageHeader";
+import { safeNextPath } from "@/app/auth/next-path";
 
 export function PasswordForm({
   title,
   subtitle,
   submitLabel,
   clearMustChange = false,
+  next,
 }: {
   title: string;
   subtitle: string;
   submitLabel: string;
   clearMustChange?: boolean;
+  /** The page the person was headed to before this screen, from ?next. */
+  next?: string;
 }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -65,20 +71,30 @@ export function PasswordForm({
       // user from editing it directly).
       await fetch("/api/auth/clear-must-change", { method: "POST" });
     }
-    router.push("/");
+    router.push(safeNextPath(next));
     router.refresh();
   }
 
+  // The email link was used or has lapsed, so there is no session to set a
+  // password on. Sign-in's expired-link screen sends a fresh one.
   if (hasSession === false) {
     return (
       <div className="text-center">
-        <p className="text-sm text-loss">
-          This link has expired or was already used.
+        <h1 className="mb-1 text-xl font-semibold">This link no longer works</h1>
+        <p className="text-sm text-muted">
+          It has expired or was already used: links in SMIF Hub emails work
+          once. Get a new one with your UGA email, or ask a SMIF officer to
+          resend your invite.
         </p>
-        <p className="mt-2 text-sm text-muted">
-          Ask an officer to send a new one, or use “Forgot password” on the
-          sign-in page.
-        </p>
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <LinkButton href="/login?error=link-expired">Get a new link</LinkButton>
+          <Link
+            href="/login"
+            className="rounded-md px-2 py-1 text-sm text-muted transition-colors hover:text-foreground"
+          >
+            Back to sign in
+          </Link>
+        </div>
       </div>
     );
   }

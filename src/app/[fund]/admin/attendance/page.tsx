@@ -1,7 +1,6 @@
-// /[fund]/admin/attendance — create meetings and take attendance
-// (SPEC 11.3).
+// /[fund]/admin/attendance, "Manage meetings": take attendance and add
+// meetings (SPEC 11.3). ?meeting=<id> opens the editor on that meeting.
 
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { can, hasFundAdminAccess } from "@/lib/permissions";
@@ -10,10 +9,12 @@ import {
   AttendanceEditor,
   type AttendanceMember,
 } from "@/components/admin/AttendanceEditor";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { PageHeader, ViewLink } from "@/components/ui/PageHeader";
+import { easternDateString } from "@/lib/format";
 import type { Meeting, MeetingAttendance, Membership, Profile } from "@/types/domain";
+import { adminTitle } from "../admin-metadata";
 
-export const metadata: Metadata = { title: "Meetings and attendance" };
+export const generateMetadata = adminTitle("attendance", "Manage meetings");
 
 type MemberRow = Membership & {
   profiles: Pick<Profile, "full_name"> | null;
@@ -21,20 +22,33 @@ type MemberRow = Membership & {
 
 export default async function AttendanceAdminPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ fund: string }>;
+  searchParams: Promise<{ meeting?: string }>;
 }) {
   const { fund: slug } = await params;
+  const { meeting: requestedMeeting } = await searchParams;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
 
   if (!hasFundAdminAccess(ctx)) notFound();
 
+  const header = (
+    <PageHeader
+      title="Manage meetings"
+      description="Add sessions and take attendance"
+      actions={
+        <ViewLink href={`/${ctx.fund.slug}/attendance`}>View meetings</ViewLink>
+      }
+    />
+  );
+
   if (!can(ctx, "record_attendance")) {
     return (
-      <div className="glass-card p-8 text-center">
-        <p className="font-medium">Attendance</p>
-        <p className="mt-1 text-sm text-muted">
+      <div className="space-y-4 sm:space-y-6">
+        {header}
+        <p className="glass-card p-6 text-sm text-muted">
           Officers, the faculty advisor, and app admins record attendance.
         </p>
       </div>
@@ -71,18 +85,18 @@ export default async function AttendanceAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Meetings and attendance</h1>
-      <Card>
-        <CardHeader title="Meetings and attendance" />
-        <div className="p-4 sm:p-6">
-          <AttendanceEditor
-            fund={ctx.fund.slug}
-            meetings={meetings}
-            members={members}
-            attendance={attendance}
-          />
-        </div>
-      </Card>
+      {header}
+      {/* Keyed on the requested meeting so following a link to another
+          meeting from this page reopens the editor on it. */}
+      <AttendanceEditor
+        key={requestedMeeting ?? "default"}
+        fund={ctx.fund.slug}
+        meetings={meetings}
+        members={members}
+        attendance={attendance}
+        today={easternDateString()}
+        initialMeetingId={requestedMeeting ?? null}
+      />
     </div>
   );
 }

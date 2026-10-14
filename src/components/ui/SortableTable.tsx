@@ -3,7 +3,9 @@
 // The one table in the app (SPEC 11.4: "every table sortable, sticky header,
 // sticky first column on mobile"). Click a header to sort, click again to
 // reverse; the first column stays put while the rest scrolls sideways, and
-// the header stays put while the rows scroll down.
+// the header stays put while the rows scroll down. A table whose first column
+// is not what names the row (the trade ledger leads with the date) pins that
+// column instead with `stickyKey`.
 //
 // Columns carry render/sortValue functions, so every caller is a client
 // component — functions do not cross the server/client boundary. Pages that
@@ -35,7 +37,7 @@ export interface SortState {
   dir: "asc" | "desc";
 }
 
-/** Shared by the header cell and the body cell of the pinned first column. */
+/** Shared by the header cell and the body cell of the pinned column. */
 const STICKY_CELL = "sticky left-0 bg-sticky-card";
 
 /**
@@ -87,17 +89,20 @@ export function SortButton({
   onClick: () => void;
 }) {
   const Icon = active ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  // On a phone the padding (cancelled by the negative margin, so the header
+  // row keeps its height) turns a 16px line of text into a target a thumb
+  // can hit.
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap transition-colors hover:text-foreground ${
+      className={`-mx-1 -my-2.5 inline-flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-1 py-2.5 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-text sm:my-0 sm:py-0 ${
         active ? "text-foreground" : ""
       }`}
     >
       {label}
       <Icon
-        className={`h-3 w-3 ${active ? "text-accent" : "opacity-40"}`}
+        className={`h-3 w-3 ${active ? "text-accent-text" : "opacity-40"}`}
         aria-hidden="true"
       />
     </button>
@@ -115,6 +120,7 @@ export function SortableTable<T>({
   caption,
   footer,
   emptyMessage = "Nothing to show.",
+  stickyKey,
 }: {
   rows: T[];
   columns: SortableColumn<T>[];
@@ -127,7 +133,10 @@ export function SortableTable<T>({
   maxHeight?: string;
   caption?: string;
   footer?: ReactNode;
-  emptyMessage?: string;
+  /** May carry a link, e.g. to the admin page that fills the table. */
+  emptyMessage?: ReactNode;
+  /** The column that stays put on a sideways scroll. Defaults to the first. */
+  stickyKey?: string;
 }) {
   const [sort, setSort] = useState<SortState | null>(initialSort ?? null);
 
@@ -152,6 +161,7 @@ export function SortableTable<T>({
   }
 
   const clickable = onRowClick !== undefined;
+  const pinnedKey = stickyKey ?? columns[0]?.key;
 
   return (
     <div
@@ -177,12 +187,10 @@ export function SortableTable<T>({
                       : undefined
                   }
                   className={`sticky top-0 bg-sticky-card py-2.5 font-medium sm:py-3 ${
-                    i === 0
-                      ? `${STICKY_CELL} z-30 px-3 sm:px-6`
-                      : "z-20 px-2 sm:px-4"
-                  } ${alignRight ? "text-right" : "text-left"} ${
-                    col.className ?? ""
-                  }`}
+                    col.key === pinnedKey ? `${STICKY_CELL} z-30` : "z-20"
+                  } ${i === 0 ? "px-3 sm:px-6" : "px-2 sm:px-4"} ${
+                    alignRight ? "text-right" : "text-left"
+                  } ${col.className ?? ""}`}
                 >
                   {col.sortValue ? (
                     <SortButton
@@ -212,12 +220,12 @@ export function SortableTable<T>({
                 <td
                   key={col.key}
                   className={`py-3 text-xs sm:py-3.5 sm:text-sm ${
-                    i === 0
-                      ? `${STICKY_CELL} z-10 px-3 transition-colors group-hover:bg-highlight sm:px-6`
-                      : "px-2 sm:px-4"
-                  } ${col.align !== "left" ? "text-right" : "text-left"} ${
-                    col.className ?? ""
-                  }`}
+                    col.key === pinnedKey
+                      ? `${STICKY_CELL} z-10 transition-colors group-hover:bg-highlight`
+                      : ""
+                  } ${i === 0 ? "px-3 sm:px-6" : "px-2 sm:px-4"} ${
+                    col.align !== "left" ? "text-right" : "text-left"
+                  } ${col.className ?? ""}`}
                 >
                   {col.render(row)}
                 </td>

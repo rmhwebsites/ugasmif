@@ -1,15 +1,16 @@
-// /[fund]/admin/updates — post and manage fund updates (SPEC 11.3).
+// /[fund]/admin/updates, "Manage updates": post, pin and delete fund
+// updates (SPEC 11.3).
 
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { can, hasFundAdminAccess } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { UpdateEditor } from "@/components/admin/UpdateEditor";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { PageHeader, ViewLink } from "@/components/ui/PageHeader";
 import type { FundUpdate } from "@/types/domain";
+import { adminTitle } from "../admin-metadata";
 
-export const metadata: Metadata = { title: "Post an update" };
+export const generateMetadata = adminTitle("updates", "Manage updates");
 
 export default async function UpdatesAdminPage({
   params,
@@ -22,11 +23,21 @@ export default async function UpdatesAdminPage({
 
   if (!hasFundAdminAccess(ctx)) notFound();
 
+  const header = (
+    <PageHeader
+      title="Manage updates"
+      description="Post, pin and delete updates."
+      actions={
+        <ViewLink href={`/${ctx.fund.slug}/updates`}>View updates</ViewLink>
+      }
+    />
+  );
+
   if (!can(ctx, "post_updates")) {
     return (
-      <div className="glass-card p-8 text-center">
-        <p className="font-medium">Updates</p>
-        <p className="mt-1 text-sm text-muted">
+      <div className="space-y-4 sm:space-y-6">
+        {header}
+        <p className="glass-card p-6 text-sm text-muted">
           Officers, the faculty advisor, and app admins post updates.
         </p>
       </div>
@@ -42,16 +53,11 @@ export default async function UpdatesAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Post an update</h1>
-      <Card>
-        <CardHeader title="Post an update" />
-        <div className="p-4 sm:p-6">
-          <UpdateEditor
-            fund={ctx.fund.slug}
-            updates={(data as FundUpdate[]) ?? []}
-          />
-        </div>
-      </Card>
+      {header}
+      <UpdateEditor
+        fund={ctx.fund.slug}
+        updates={(data as FundUpdate[]) ?? []}
+      />
     </div>
   );
 }

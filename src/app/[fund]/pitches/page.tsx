@@ -2,20 +2,24 @@
 // place (SPEC 11.2). A vote is a stage of a pitch, so open votes lead the
 // page with the viewer's own ballot state, and the rest of the pipeline
 // follows grouped by where each pitch stands. The status chips narrow to one
-// stage; they are plain links driven by ?status=. Officers see a Schedule
-// shortcut on submitted pitches. Members read only their own ballots under
-// RLS, which is exactly what the ballot state needs.
+// stage; they are plain links driven by ?status=. A search box (?q=, over
+// title, ticker and author) and a sector picker (?sector=<slug>) narrow the
+// list too, and the chips keep both. Officers see a Schedule shortcut on
+// submitted pitches, and whoever may submit a draft sees a Submit shortcut.
+// Members read only their own ballots under RLS, which is exactly what the
+// ballot state needs.
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 import { getAuthState, getFundContext } from "@/lib/fund";
-import { can, isOfficer } from "@/lib/permissions";
+import { can, canOpenAdminSection } from "@/lib/permissions";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton, ManageLink, PageHeader } from "@/components/ui/PageHeader";
 import { PitchCard, type PitchListItem } from "@/components/pitch/PitchCard";
-import type { PitchStatus, VoteChoice } from "@/types/domain";
+import { PitchFilters } from "@/components/pitch/PitchFilters";
+import type { PitchStatus, Sector, VoteChoice } from "@/types/domain";
 
 export const metadata: Metadata = { title: "Pitches" };
 
@@ -43,47 +47,113 @@ const GROUPS: { title: string; statuses: PitchStatus[] }[] = [
   { title: "Withdrawn", statuses: ["withdrawn"] },
 ];
 
+type SectorOption = Pick<Sector, "id" | "name" | "slug" | "is_active">;
+
+function first(v: string | string[] | undefined): string {
+  return (Array.isArray(v) ? v[0] : v) ?? "";
+}
+
 export default async function PitchesPage({
   params,
   searchParams,
 }: {
   params: Promise<{ fund: string }>;
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [{ fund: slug }, { status }] = await Promise.all([
-    params,
-    searchParams,
-  ]);
+  const [{ fund: slug }, sp] = await Promise.all([params, searchParams]);
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
 
-  const { supabase, user } = await getAuthState();
-  const { data } = await supabase
-    .from("pitches")
-    .select("*, sector:sectors(name), author:profiles!author_id(full_name)")
-    .eq("fund_id", ctx.fund.id)
-    .order("created_at", { ascending: false });
-  const pitches = (data as unknown as PitchListItem[] | null) ?? [];
+  const status = first(sp.status);
+  const sectorQ = first(sp.sector).trim();
+  const q = first(sp.q).trim();
 
-  // The viewer's own ballots on anything that has been voted on.
+  const { supabase, user } = await getAuthState();
+  const [pitchesRes, sectorsRes] = await Promise.all([
+    supabase
+      .from("pitches")
+      .select(
+        "*, sector:sectors(name, slug), author:profiles!author_id(full_name)"
+      )
+      .eq("fund_id", ctx.fund.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("sectors")
+      .select("id, name, slug, is_active")
+      .eq("fund_id", ctx.fund.id)
+      .order("sort_order"),
+  ]);
+  const allPitches = (pitchesRes.data as unknown as PitchListItem[] | null) ?? [];
+  const sectors = (sectorsRes.data as SectorOption[] | null) ?? [];
+
+  // The picker offers the active sectors, plus any retired one that still
+  // has pitches on file.
+  const pitchedSectorIds = new Set(allPitches.map((p) => p.sector_id));
+  const sectorOptions = sectors.filter(
+    (s) => s.is_active || pitchedSectorIds.has(s.id)
+  );
+  const activeSector = sectorQ
+    ? sectors.find((s) => s.slug === sectorQ) ?? null
+    : null;
+
+  // Sector and search narrow the whole page; the chips count what is left.
+  const needle = q.toLowerCase();
+  const pitches = allPitches.filter((p) => {
+    if (sectorQ && p.sector_id !== activeSector?.id) return false;
+    if (needle) {
+      const hay = [
+        p.title,
+        p.symbol,
+        p.instrument_name,
+        p.author?.full_name,
+        p.sector?.name,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(needle)) return false;
+    }
+    return true;
+  });
+  const narrowed = sectorQ !== "" || q !== "";
+
+  // The viewer's own ballots on anything that has been voted on, and which
+  // passed pitches still have a ticket waiting to be executed.
   const votedIds = pitches
     .filter((p) =>
       ["voting", "passed", "failed", "executed"].includes(p.status)
     )
     .map((p) => p.id);
+  const passedIds = pitches
+    .filter((p) => p.status === "passed")
+    .map((p) => p.id);
+  const [voteRes, ticketRes] = await Promise.all([
+    votedIds.length > 0 && user
+      ? supabase
+          .from("votes")
+          .select("pitch_id, choice")
+          .eq("voter_id", user.id)
+          .in("pitch_id", votedIds)
+      : Promise.resolve({ data: null }),
+    passedIds.length > 0
+      ? supabase
+          .from("trade_tickets")
+          .select("pitch_id")
+          .eq("status", "pending")
+          .in("pitch_id", passedIds)
+      : Promise.resolve({ data: null }),
+  ]);
   const myVotes = new Map<string, VoteChoice>();
-  if (votedIds.length > 0 && user) {
-    const { data: voteRows } = await supabase
-      .from("votes")
-      .select("pitch_id, choice")
-      .eq("voter_id", user.id)
-      .in("pitch_id", votedIds);
-    for (const v of (voteRows as
-      | { pitch_id: string; choice: VoteChoice }[]
-      | null) ?? []) {
-      myVotes.set(v.pitch_id, v.choice);
-    }
+  for (const v of (voteRes.data as
+    | { pitch_id: string; choice: VoteChoice }[]
+    | null) ?? []) {
+    myVotes.set(v.pitch_id, v.choice);
   }
+  const tradePending = new Set(
+    ((ticketRes.data as { pitch_id: string | null }[] | null) ?? []).map(
+      (t) => t.pitch_id
+    )
+  );
 
   const filter = STATUSES.some((s) => s.key === status)
     ? (status as PitchStatus | "all")
@@ -93,7 +163,7 @@ export default async function PitchesPage({
     countByStatus.set(p.status, (countByStatus.get(p.status) ?? 0) + 1);
   }
 
-  const officer = isOfficer(ctx);
+  const canScheduleAny = can(ctx, "schedule_pitch");
   const canDraft = can(ctx, "draft_pitch");
   const canVote = can(ctx, "cast_vote");
 
@@ -111,14 +181,29 @@ export default async function PitchesPage({
   const filtered =
     filter === "all" ? pitches : pitches.filter((p) => p.status === filter);
 
+  // Chips and the clear link keep the sector and search in force.
+  const hrefFor = (next: { status?: string; sector?: string; q?: string }) => {
+    const query = new URLSearchParams();
+    const st = next.status ?? filter;
+    if (st !== "all") query.set("status", st);
+    const sec = next.sector ?? sectorQ;
+    if (sec) query.set("sector", sec);
+    const text = next.q ?? q;
+    if (text) query.set("q", text);
+    const s = query.toString();
+    return s ? `/${slug}/pitches?${s}` : `/${slug}/pitches`;
+  };
+
   const card = (p: PitchListItem) => (
     <PitchCard
       key={p.id}
       pitch={p}
       fund={slug}
-      showSchedule={officer}
+      showSchedule={canScheduleAny}
+      showSubmit={can(ctx, "submit_pitch", { sectorId: p.sector_id })}
       myVote={myVotes.get(p.id)}
       canVote={canVote}
+      tradePending={tradePending.has(p.id)}
     />
   );
 
@@ -129,13 +214,19 @@ export default async function PitchesPage({
         description="Every pitch, from first draft through the class vote to the trade."
         actions={
           <>
-            {officer && (
+            {canOpenAdminSection(ctx, "pitches") && (
               <ManageLink href={`/${slug}/admin/pitches`}>
-                Scheduling
+                Manage pitches
               </ManageLink>
             )}
             {canDraft && (
-              <LinkButton href={`/${slug}/pitches/new`}>
+              <LinkButton
+                href={
+                  activeSector?.is_active
+                    ? `/${slug}/pitches/new?sector=${activeSector.slug}`
+                    : `/${slug}/pitches/new`
+                }
+              >
                 <Plus className="h-4 w-4" /> New pitch
               </LinkButton>
             )}
@@ -143,44 +234,63 @@ export default async function PitchesPage({
         }
       />
 
-      {pitches.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {STATUSES.filter(
-            // A stage with nothing in it is a dead end; keep the one you are on.
-            (s) =>
-              s.key === "all" || s.key === filter || countByStatus.has(s.key)
-          ).map((s) => {
-            const count =
-              s.key === "all"
-                ? pitches.length
-                : (countByStatus.get(s.key) ?? 0);
-            const active = filter === s.key;
-            return (
+      {allPitches.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <PitchFilters
+              key={`${filter}|${sectorQ}|${q}`}
+              fund={slug}
+              status={filter}
+              q={q}
+              sector={activeSector ? sectorQ : ""}
+              sectors={sectorOptions.map((s) => ({ slug: s.slug, name: s.name }))}
+              mySectorSlug={ctx.sector?.slug ?? null}
+            />
+            {activeSector && (
               <Link
-                key={s.key}
-                href={
-                  s.key === "all"
-                    ? `/${slug}/pitches`
-                    : `/${slug}/pitches?status=${s.key}`
-                }
-                aria-current={active ? "page" : undefined}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-accent text-white"
-                    : "bg-highlight text-muted hover:text-foreground"
-                }`}
+                href={`/${slug}/sectors/${activeSector.slug}`}
+                className="inline-flex items-center gap-1 text-sm font-medium text-accent-text hover:underline"
               >
-                {s.label}
-                {count > 0 && (
-                  <span
-                    className={`ml-1.5 tabular-nums ${active ? "text-white/80" : ""}`}
-                  >
-                    {count}
-                  </span>
-                )}
+                {activeSector.name} sector page
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
               </Link>
-            );
-          })}
+            )}
+          </div>
+
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {STATUSES.filter(
+              // A stage with nothing in it is a dead end; keep the one you are on.
+              (s) =>
+                s.key === "all" || s.key === filter || countByStatus.has(s.key)
+            ).map((s) => {
+              const count =
+                s.key === "all"
+                  ? pitches.length
+                  : (countByStatus.get(s.key) ?? 0);
+              const active = filter === s.key;
+              return (
+                <Link
+                  key={s.key}
+                  href={hrefFor({ status: s.key })}
+                  aria-current={active ? "page" : undefined}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-accent text-on-accent"
+                      : "bg-highlight text-muted hover:text-foreground"
+                  }`}
+                >
+                  {s.label}
+                  {count > 0 && (
+                    <span
+                      className={`ml-1.5 tabular-nums ${active ? "text-on-accent/80" : ""}`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -188,21 +298,43 @@ export default async function PitchesPage({
         pitches.length > 0 &&
         !countByStatus.has("voting") && (
           <p className="text-sm text-muted">
-            No votes are open right now. When an officer opens one you&apos;ll
-            get an email, and it will show at the top of this page.
+            {canVote
+              ? "No votes are open right now. When an officer opens one you'll get an email, and it will show at the top of this page."
+              : "No votes are open right now. Open votes show at the top of this page."}
           </p>
         )}
 
-      {pitches.length === 0 ? (
+      {allPitches.length === 0 ? (
         <EmptyState
           title="No pitches yet"
-          hint="Sector teams start pitches from here or from their sector page. Draft one, attach the deck, and your sector leader submits it for a class date."
+          hint={
+            canDraft
+              ? "Sector teams start pitches from here or from their sector page. Draft one, attach the deck, and your sector leader submits it for a class date."
+              : "Pitches show here as the sector teams draft them."
+          }
           action={
             canDraft ? (
               <LinkButton href={`/${slug}/pitches/new`}>
                 <Plus className="h-4 w-4" /> Start the first pitch
               </LinkButton>
             ) : undefined
+          }
+        />
+      ) : pitches.length === 0 && narrowed ? (
+        <EmptyState
+          title="No pitches match"
+          hint={
+            activeSector && !q
+              ? `${activeSector.name} has no pitches yet. Pick another sector, or clear the filters to see every pitch.`
+              : "Try another search or sector, or clear the filters to see every pitch."
+          }
+          action={
+            <Link
+              href={hrefFor({ sector: "", q: "" })}
+              className="text-sm font-medium text-accent-text hover:underline"
+            >
+              Clear filters
+            </Link>
           }
         />
       ) : filter !== "all" ? (

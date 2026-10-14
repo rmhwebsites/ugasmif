@@ -86,7 +86,7 @@ export function ProfileForm({
         router.refresh();
       }
     } catch {
-      setSaveError("Network error — check your connection and try again.");
+      setSaveError("Network error. Check your connection and try again.");
     } finally {
       setSaving(false);
     }
@@ -171,7 +171,7 @@ export function ProfileForm({
               <span>
                 Mute update emails
                 <span className="block text-xs text-muted">
-                  Skip the email when officers post a fund update — you can
+                  Skip the email when officers post a fund update. You can
                   still read everything on the Updates page.
                 </span>
               </span>
@@ -244,7 +244,7 @@ export function ProfileForm({
           {pwError && <p className="text-sm text-loss">{pwError}</p>}
           {pwSaved && (
             <p className="text-sm text-gain">
-              Password updated — use it the next time you sign in.
+              Password updated. Use it the next time you sign in.
             </p>
           )}
 

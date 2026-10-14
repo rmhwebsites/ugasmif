@@ -46,29 +46,34 @@ export function ContributionBars({
               className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-highlight sm:px-6"
             >
               <SecurityLogo symbol={r.symbol} name={r.name} size="sm" />
-              <span className="w-14 shrink-0 truncate text-xs font-semibold sm:text-sm">
-                {r.label}
-              </span>
-
-              {/* Two half-width tracks meeting at a centre line: the loss bar
-                  grows leftwards from it, the gain bar rightwards. */}
-              <span className="flex min-w-0 flex-1 items-center">
-                <span className="flex h-5 flex-1 justify-end">
-                  {!positive && (
-                    <span
-                      className="h-full rounded-l-sm bg-loss/70"
-                      style={{ width: `${width}%` }}
-                    />
-                  )}
+              {/* On a phone the label sits over its bars, so a bond's full
+                  name fits. From sm up this wrapper drops out of the layout
+                  and the label and bars share one row. */}
+              <span className="min-w-0 flex-1 sm:contents">
+                <span className="block break-words text-xs font-semibold sm:w-14 sm:shrink-0 sm:truncate sm:text-sm">
+                  {r.label}
                 </span>
-                <span className="h-5 w-px shrink-0 bg-card-border" />
-                <span className="flex h-5 flex-1">
-                  {positive && (
-                    <span
-                      className="h-full rounded-r-sm bg-gain/70"
-                      style={{ width: `${width}%` }}
-                    />
-                  )}
+
+                {/* Two half-width tracks meeting at a centre line: the loss
+                    bar grows leftwards from it, the gain bar rightwards. */}
+                <span className="mt-1 flex min-w-0 flex-1 items-center sm:mt-0">
+                  <span className="flex h-2 flex-1 justify-end sm:h-5">
+                    {!positive && (
+                      <span
+                        className="h-full rounded-l-sm bg-loss/70"
+                        style={{ width: `${width}%` }}
+                      />
+                    )}
+                  </span>
+                  <span className="h-2 w-px shrink-0 bg-card-border sm:h-5" />
+                  <span className="flex h-2 flex-1 sm:h-5">
+                    {positive && (
+                      <span
+                        className="h-full rounded-r-sm bg-gain/70"
+                        style={{ width: `${width}%` }}
+                      />
+                    )}
+                  </span>
                 </span>
               </span>
 

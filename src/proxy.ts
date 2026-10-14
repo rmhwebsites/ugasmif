@@ -14,6 +14,21 @@ const PUBLIC_PATHS = [
   "/auth/reset",
 ];
 
+/**
+ * The page that was asked for, to carry through sign-in and the first-run
+ * screens as ?next so the person ends up where their link pointed. Null for
+ * the root, which picks a fund on its own. `_rsc` is the router's own
+ * marker on client navigations, not part of the page's address.
+ */
+function requestedPath(request: NextRequest): string | null {
+  const { pathname, searchParams } = request.nextUrl;
+  if (pathname === "/") return null;
+  const params = new URLSearchParams(searchParams);
+  params.delete("_rsc");
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
 export default async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -48,7 +63,8 @@ export default async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
-    if (pathname !== "/") url.searchParams.set("next", pathname);
+    const next = requestedPath(request);
+    if (next) url.searchParams.set("next", next);
     return NextResponse.redirect(url);
   }
 
@@ -91,6 +107,8 @@ export default async function proxy(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = "/auth/change-password";
       url.search = "";
+      const next = requestedPath(request);
+      if (next) url.searchParams.set("next", next);
       return NextResponse.redirect(url);
     }
 
@@ -103,6 +121,8 @@ export default async function proxy(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = "/onboarding";
       url.search = "";
+      const next = requestedPath(request);
+      if (next) url.searchParams.set("next", next);
       return NextResponse.redirect(url);
     }
   }

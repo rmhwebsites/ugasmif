@@ -5,6 +5,10 @@
 // after the last change while dirty. Listed names come from
 // /api/market/search; bonds are free text + CUSIP. Deck (PDF/PPTX) and model
 // (XLSX) uploads go through the files route so storage RLS applies.
+//
+// Whoever may submit the draft (its sector leader, an officer) gets "Submit
+// for scheduling" in the top bar, so finishing a draft and sending it on
+// happen in one place: it saves any pending change first, then submits.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -15,6 +19,7 @@ import {
   Loader2,
   Paperclip,
   Search,
+  Send,
   Trash2,
   X,
 } from "lucide-react";
@@ -102,7 +107,10 @@ export function PitchEditor({
   files = [],
   sectors,
   defaultSectorId,
+  defaultAction,
   canPickAnySector,
+  canSubmit = false,
+  canSetTargets = false,
   holdings,
   pitchOptions,
   isFixedIncome,
@@ -113,8 +121,14 @@ export function PitchEditor({
   files?: PitchFile[];
   sectors: EditorSector[];
   defaultSectorId: string | null;
+  /** Create mode: the action to start with (?action= on the new page). */
+  defaultAction?: PitchAction;
   /** Officers/admins may pitch for any sector; members are pinned to theirs. */
   canPickAnySector: boolean;
+  /** Edit mode, draft: the viewer may submit it for scheduling. */
+  canSubmit?: boolean;
+  /** The viewer sets sector targets, so a rebalance links to Manage sectors. */
+  canSetTargets?: boolean;
   holdings: EditorHolding[];
   /** The fund's other pitches, for the bear-pitch link. */
   pitchOptions: EditorPitchOption[];
@@ -128,8 +142,14 @@ export function PitchEditor({
 
   const [form, setForm] = useState<FormState>({
     title: pitch?.title ?? "",
-    pitch_type: pitch?.pitch_type ?? (isFixedIncome ? "single" : "bull"),
-    action: pitch?.action ?? "buy",
+    pitch_type:
+      pitch?.pitch_type ??
+      (defaultAction === "rebalance"
+        ? "rebalance"
+        : isFixedIncome
+          ? "single"
+          : "bull"),
+    action: pitch?.action ?? defaultAction ?? "buy",
     sector_id: pitch?.sector_id ?? defaultSectorId ?? "",
     holding_id: pitch?.holding_id ?? "",
     symbol: pitch?.symbol ?? "",
@@ -151,6 +171,7 @@ export function PitchEditor({
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Security search
   const [query, setQuery] = useState("");
@@ -195,8 +216,8 @@ export function PitchEditor({
   const lastSavedRef = useRef<string>(mode === "edit" ? payloadJson : "");
 
   const save = useCallback(
-    async (json: string) => {
-      if (!pitch) return;
+    async (json: string): Promise<boolean> => {
+      if (!pitch) return false;
       setSaveState("saving");
       try {
         const res = await fetch(`/api/${fund}/pitches/${pitch.id}`, {
@@ -208,19 +229,51 @@ export function PitchEditor({
           const body: { error?: string } = await res.json().catch(() => ({}));
           setError(body.error ?? "Autosave failed — your last change is not saved.");
           setSaveState("error");
-          return;
+          return false;
         }
         lastSavedRef.current = json;
         setError(null);
         setSavedAt(new Date());
         setSaveState("saved");
+        return true;
       } catch {
         setError("Network error — your last change is not saved.");
         setSaveState("error");
+        return false;
       }
     },
     [fund, pitch]
   );
+
+  // Save what is on screen, then hand the draft on to scheduling. The pitch
+  // page shows where it went next.
+  async function handleSubmit() {
+    if (!pitch) return;
+    setError(null);
+    setSubmitting(true);
+    if (payloadJson !== lastSavedRef.current && !(await save(payloadJson))) {
+      setSubmitting(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/${fund}/pitches/${pitch.id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!res.ok) {
+        const json: { error?: string } = await res.json().catch(() => ({}));
+        setError(json.error ?? "The pitch could not be submitted. Try again.");
+        setSubmitting(false);
+        return;
+      }
+      router.push(`/${fund}/pitches/${pitch.id}`);
+      router.refresh();
+    } catch {
+      setError("Network error: the pitch was not submitted. Try again.");
+      setSubmitting(false);
+    }
+  }
 
   // Debounced autosave (~3s after the last keystroke) while editing a draft.
   useEffect(() => {
@@ -381,22 +434,31 @@ export function PitchEditor({
         >
           {saveLabel}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {mode === "edit" && pitch && (
             <>
               <Link
                 href={`/${fund}/pitches/${pitch.id}`}
-                className="text-xs font-medium text-accent hover:underline"
+                className="text-xs font-medium text-accent-text hover:underline"
               >
                 View pitch page
               </Link>
               <Button
                 variant="secondary"
-                disabled={saveState === "saving"}
+                disabled={saveState === "saving" || submitting}
                 onClick={() => void save(payloadJson)}
               >
                 Save now
               </Button>
+              {canSubmit && pitch.status === "draft" && (
+                <Button
+                  disabled={saveState === "saving" || submitting}
+                  onClick={() => void handleSubmit()}
+                >
+                  <Send className="h-4 w-4" />
+                  {submitting ? "Submitting…" : "Submit for scheduling"}
+                </Button>
+              )}
             </>
           )}
           {mode === "create" && (
@@ -484,7 +546,7 @@ export function PitchEditor({
                     type="button"
                     onClick={() => setSecurityMode(m)}
                     className={`rounded-md px-2.5 py-1 transition-colors ${
-                      securityMode === m ? "bg-accent text-white" : "text-muted hover:text-foreground"
+                      securityMode === m ? "bg-accent text-on-accent" : "text-muted hover:text-foreground"
                     }`}
                   >
                     {m === "listed" ? "Listed (search)" : "Bond / other"}
@@ -545,7 +607,7 @@ export function PitchEditor({
                 )}
                 {form.symbol !== "" && (
                   <p className="mt-2 flex items-center gap-2 text-sm">
-                    <span className="rounded-md bg-accent-soft px-2 py-0.5 font-medium text-accent">
+                    <span className="rounded-md bg-accent-soft px-2 py-0.5 font-medium text-accent-text">
                       {form.symbol}
                     </span>
                     <span className="min-w-0 truncate text-muted">{form.instrument_name}</span>
@@ -605,8 +667,21 @@ export function PitchEditor({
         ) : (
           <p className="rounded-lg bg-highlight px-3 py-2 text-xs text-muted">
             Rebalance pitch: put the proposed sector target table at the top of
-            the thesis. If it passes, an officer applies the new targets under
-            Fund admin → Sectors. Nothing changes on its own.
+            the thesis. Nothing changes on its own if it passes:{" "}
+            {canSetTargets ? (
+              <>
+                the new targets are applied on{" "}
+                <Link
+                  href={`/${fund}/admin/sectors#targets`}
+                  className="font-medium text-accent-text hover:underline"
+                >
+                  Manage sectors
+                </Link>
+                .
+              </>
+            ) : (
+              "an officer applies the new targets."
+            )}
           </p>
         )}
 
@@ -708,7 +783,7 @@ export function PitchEditor({
           <div className="mt-3 space-y-3">
             <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-foreground">
-                <FileText className="h-4 w-4 shrink-0 text-accent" />
+                <FileText className="h-4 w-4 shrink-0 text-accent-text" />
                 {uploading === "deck" ? "Uploading deck…" : "Upload deck (PDF or PPTX, ≤25MB)"}
                 <input
                   type="file"
@@ -722,7 +797,7 @@ export function PitchEditor({
                 />
               </label>
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-input-border px-3 py-3 text-sm text-muted transition-colors hover:border-accent hover:text-foreground">
-                <FileSpreadsheet className="h-4 w-4 shrink-0 text-accent" />
+                <FileSpreadsheet className="h-4 w-4 shrink-0 text-accent-text" />
                 {uploading === "model" ? "Uploading model…" : "Upload model (XLSX, ≤25MB)"}
                 <input
                   type="file"

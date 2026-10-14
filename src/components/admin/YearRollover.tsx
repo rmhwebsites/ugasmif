@@ -1,8 +1,11 @@
 "use client";
 
-// Academic year rollover with a typed confirmation (SPEC 17.2).
+// Academic year rollover with a typed confirmation (SPEC 17.2). It acts on
+// both funds, and importing the new roster comes straight after, so the
+// explainer and the success message both link there.
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 
@@ -10,10 +13,13 @@ export function YearRollover({
   fund,
   currentLabel,
   nextLabel,
+  rosterImportHref,
 }: {
   fund: string;
   currentLabel: string;
   nextLabel: string;
+  /** Where the new roster is imported, e.g. /athena/admin/members#roster-import. */
+  rosterImportHref: string;
 }) {
   const router = useRouter();
   const [confirm, setConfirm] = useState("");
@@ -38,7 +44,7 @@ export function YearRollover({
       return;
     }
     setNotice(
-      `${nextLabel} is now the current year. ${data.memberships_archived} memberships became alumni. Import the new roster next.`
+      `${nextLabel} is now the current year. ${data.memberships_archived} memberships became alumni.`
     );
     setConfirm("");
     router.refresh();
@@ -55,12 +61,18 @@ export function YearRollover({
           </li>
           <li>Create {nextLabel} and make it the current academic year.</li>
           <li>
-            Leave holdings, trades, pitches, and votes untouched — last
+            Leave holdings, trades, pitches, and votes untouched. Last
             year&apos;s history stays intact.
           </li>
           <li>
-            Leave the roster empty until you import it, so do this right before
-            importing the new roster.
+            Leave the roster empty until you import it, so do this right before{" "}
+            <Link
+              href={rosterImportHref}
+              className="font-medium text-accent-text hover:underline"
+            >
+              importing the new roster
+            </Link>
+            .
           </li>
         </ul>
       </div>
@@ -79,7 +91,17 @@ export function YearRollover({
       </label>
 
       {error && <p className="text-sm text-loss">{error}</p>}
-      {notice && <p className="text-sm text-gain">{notice}</p>}
+      {notice && (
+        <p className="text-sm text-gain">
+          {notice}{" "}
+          <Link
+            href={rosterImportHref}
+            className="font-medium text-accent-text hover:underline"
+          >
+            Import the new roster
+          </Link>
+        </p>
+      )}
 
       <Button
         type="submit"

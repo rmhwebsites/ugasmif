@@ -1,22 +1,33 @@
 // First-run onboarding. Roster import knows a member's email and full name;
 // this collects the rest once, then never asks again (profiles.onboarded_at).
+// The proxy carries the page that was asked for as ?next, so a member who
+// arrived from an email link ends up there once they finish.
 
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getAuthState, getCurrentYear } from "@/lib/fund";
 import { SmifLogo } from "@/components/icons/SmifLogo";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import { OnboardingForm } from "@/components/onboarding/OnboardingForm";
+import { safeNextPath } from "@/app/auth/next-path";
 import type { Fund, Membership, Sector } from "@/types/domain";
 
 export const metadata: Metadata = { title: "Welcome" };
 
 type MembershipRow = Membership & { funds: Pick<Fund, "name" | "slug"> | null };
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const { next: nextParam } = await searchParams;
+  const next = safeNextPath(typeof nextParam === "string" ? nextParam : null);
+
   const { supabase, user, profile } = await getAuthState();
   if (!user) redirect("/login");
   if (!profile) redirect("/no-access");
-  if (profile.onboarded_at) redirect("/");
+  if (profile.onboarded_at) redirect(next);
 
   const year = await getCurrentYear(supabase);
   const { data: membershipRows } = year
@@ -67,7 +78,11 @@ export default async function OnboardingPage() {
           initialAvatarUrl={profile.avatar_url}
           userId={user.id}
           pickers={pickers}
+          next={next}
         />
+        <div className="mt-4 flex justify-center">
+          <LogoutButton variant="ghost">Not you? Sign out</LogoutButton>
+        </div>
       </div>
     </main>
   );

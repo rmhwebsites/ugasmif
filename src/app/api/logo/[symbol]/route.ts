@@ -9,8 +9,10 @@
 //   3. One place to change. If the provider disappears — as Clearbit's free
 //      logo API did — only this file moves.
 //
-// A symbol with no logo returns 404 rather than a placeholder image, so the
-// component can fall back to the ticker's initials in the fund accent.
+// A symbol with no logo answers 204 (no content) rather than a placeholder
+// image, so the component falls back to the ticker's initials in the fund
+// accent. Not 404: browsers log every 4xx image load as a console error,
+// and a bond fund has plenty of tickers with no logo at all.
 
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -37,7 +39,7 @@ export async function GET(
   // fetch arbitrary paths on the upstream host.
   if (!SYMBOL.test(symbol)) {
     return new NextResponse(null, {
-      status: 404,
+      status: 204,
       headers: { "Cache-Control": MISS_CACHE },
     });
   }
@@ -51,7 +53,7 @@ export async function GET(
     );
     if (!upstream.ok) {
       return new NextResponse(null, {
-        status: 404,
+        status: 204,
         headers: { "Cache-Control": MISS_CACHE },
       });
     }
@@ -60,7 +62,7 @@ export async function GET(
     if (!type.startsWith("image/")) {
       // An HTML error page dressed as a 200.
       return new NextResponse(null, {
-        status: 404,
+        status: 204,
         headers: { "Cache-Control": MISS_CACHE },
       });
     }
@@ -70,7 +72,7 @@ export async function GET(
     // logo; the initials fallback looks better than a blank square.
     if (body.byteLength < 200 || body.byteLength > MAX_BYTES) {
       return new NextResponse(null, {
-        status: 404,
+        status: 204,
         headers: { "Cache-Control": MISS_CACHE },
       });
     }
@@ -87,7 +89,7 @@ export async function GET(
     // Timeout or network failure: a short cache so the next page view retries
     // soon, rather than pinning the miss for a year.
     return new NextResponse(null, {
-      status: 404,
+      status: 204,
       headers: { "Cache-Control": "public, max-age=300" },
     });
   } finally {

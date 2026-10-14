@@ -1,6 +1,8 @@
 // /[fund]/profile — name, avatar, email preferences, password (SPEC 11.2).
 // Server component loads the account card (email + roles across both funds,
-// read-only); the ProfileForm client island does the editing.
+// read-only); the ProfileForm client island does the editing. A member with
+// a sector gets "My sector" in the header, and each sector in the roles list
+// opens that sector's page.
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -10,6 +12,8 @@ import { roleLabel } from "@/lib/permissions";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { LinkButton, PageHeader } from "@/components/ui/PageHeader";
+import { SectorLink } from "@/components/ui/SectorLink";
 import type { MembershipRole, MembershipStatus } from "@/types/domain";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -21,7 +25,7 @@ interface RoleRow {
   is_sector_leader: boolean;
   title_override: string | null;
   fund: { name: string; slug: string } | null;
-  sector: { name: string } | null;
+  sector: { name: string; slug: string } | null;
 }
 
 export default async function ProfilePage({
@@ -37,21 +41,32 @@ export default async function ProfilePage({
   const { data } = await supabase
     .from("memberships")
     .select(
-      "role, status, is_sector_leader, title_override, fund:funds(name, slug), sector:sectors(name)"
+      "role, status, is_sector_leader, title_override, fund:funds(name, slug), sector:sectors(name, slug)"
     )
     .eq("user_id", ctx.profile.id)
     .eq("academic_year_id", ctx.currentYear.id)
     .order("created_at", { ascending: true });
   const roles = (data as unknown as RoleRow[] | null) ?? [];
+  // This fund's sector, for the header shortcut.
+  const mySector =
+    ctx.membership?.status === "active" ? ctx.sector : null;
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Profile</h1>
-        <p className="mt-1 text-xs text-muted sm:text-sm">
-          How you appear across SMIF Hub, and how it reaches you.
-        </p>
-      </div>
+      <PageHeader
+        title="Profile"
+        description="How you appear across SMIF Hub, and how it reaches you."
+        actions={
+          mySector ? (
+            <LinkButton
+              href={`/${ctx.fund.slug}/sectors/${mySector.slug}`}
+              variant="secondary"
+            >
+              My sector: {mySector.name}
+            </LinkButton>
+          ) : undefined
+        }
+      />
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">
@@ -78,7 +93,7 @@ export default async function ProfilePage({
                   {ctx.profile.email}
                 </p>
                 <p className="mt-1 text-xs text-muted">
-                  Sign-in email — officers manage this on the roster.
+                  Your sign-in email. An officer can change it.
                 </p>
               </div>
 
@@ -90,8 +105,8 @@ export default async function ProfilePage({
                 !ctx.isAppAdmin &&
                 !ctx.isFacultyAdvisor ? (
                   <p className="mt-1 text-sm text-muted">
-                    No membership for the current year — ask a SMIF officer to
-                    add you to the roster.
+                    You&apos;re not on this year&apos;s team. Ask a SMIF
+                    officer to add you.
                   </p>
                 ) : (
                   <ul className="mt-2 space-y-2">
@@ -101,12 +116,22 @@ export default async function ProfilePage({
                           {r.fund?.name ?? "Fund"}
                         </span>
                         <span className="text-muted">
-                          {" — "}
+                          {" · "}
                           {roleLabel(
                             r.status === "active" ? r.role : "viewer",
                             r.status === "active" ? r.title_override : null
                           )}
-                          {r.sector?.name ? ` · ${r.sector.name}` : ""}
+                          {r.sector && (
+                            <>
+                              {" · "}
+                              <SectorLink
+                                fund={r.fund?.slug ?? ctx.fund.slug}
+                                slug={r.sector.slug}
+                                name={r.sector.name}
+                                className="text-accent-text"
+                              />
+                            </>
+                          )}
                         </span>{" "}
                         {r.is_sector_leader && r.status === "active" && (
                           <Badge tone="accent">Sector leader</Badge>
@@ -138,8 +163,7 @@ export default async function ProfilePage({
                   </ul>
                 )}
                 <p className="mt-2 text-xs text-muted">
-                  Roles are set by the officers on the roster — this card is
-                  read-only.
+                  Officers set roles, so this card is read-only.
                 </p>
               </div>
             </div>

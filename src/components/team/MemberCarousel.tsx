@@ -1,8 +1,9 @@
 "use client";
 
 // A row of people you swipe through: picture, name, role under the name.
-// Used wherever the app lists a team, so the roster and a sector page show
-// the same card.
+// Used wherever the app lists a team, so the Team page and a sector page
+// show the same card. A card with `href` (the member editor, for people who
+// manage members) opens it; otherwise the card is plain.
 //
 // Built on native overflow scrolling with snap points rather than a carousel
 // library: touch, trackpad and keyboard all work without shipping anything,
@@ -10,6 +11,7 @@
 // a pointer convenience on top, not the mechanism.
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 
@@ -20,16 +22,40 @@ export type TeamMember = {
   role: string;
   avatarUrl: string | null;
   isLeader: boolean;
+  /** Where the card opens, e.g. the member's page in Fund admin. */
+  href?: string;
 };
 
+const CARD =
+  "flex h-full flex-col items-center rounded-xl bg-highlight p-3 text-center sm:p-4";
+
 export function MemberCard({ member }: { member: TeamMember }) {
+  if (member.href) {
+    return (
+      <Link
+        href={member.href}
+        title={`Manage ${member.name}`}
+        className={`${CARD} transition-colors hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text`}
+      >
+        <MemberCardBody member={member} />
+      </Link>
+    );
+  }
   return (
-    <div className="flex h-full flex-col items-center rounded-xl bg-highlight p-3 text-center transition-colors hover:bg-accent-soft sm:p-4">
+    <div className={CARD}>
+      <MemberCardBody member={member} />
+    </div>
+  );
+}
+
+function MemberCardBody({ member }: { member: TeamMember }) {
+  return (
+    <>
       <Avatar
         src={member.avatarUrl}
         size="lg"
         className={`sm:h-20 sm:w-20 ${
-          member.isLeader ? "ring-2 ring-accent" : ""
+          member.isLeader ? "ring-2 ring-accent-text" : ""
         }`}
       />
       <p className="mt-2 text-sm font-medium leading-snug text-balance">
@@ -37,12 +63,12 @@ export function MemberCard({ member }: { member: TeamMember }) {
       </p>
       <p
         className={`mt-1 text-xs leading-snug ${
-          member.isLeader ? "text-accent" : "text-muted"
+          member.isLeader ? "text-accent-text" : "text-muted"
         }`}
       >
         {member.role}
       </p>
-    </div>
+    </>
   );
 }
 
@@ -91,7 +117,7 @@ export function MemberCarousel({
         role="region"
         aria-label={label}
         tabIndex={0}
-        className="snap-x snap-mandatory overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&::-webkit-scrollbar]:hidden"
+        className="snap-x snap-mandatory overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text [&::-webkit-scrollbar]:hidden"
       >
         <ul className="flex gap-3">
           {members.map((m) => (

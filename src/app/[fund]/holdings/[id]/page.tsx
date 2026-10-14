@@ -10,14 +10,29 @@
 // holding's benchmark_tenor on the nearest prior curve date; skipped when
 // unavailable), a FINRA TRACE lookup link, and pitches.
 //
+// The page is also the hub between a pitch, its ticket and the position:
+// pending tickets for this security sit under the stats, each trade in the
+// history links to the pitch behind it, and the pitches card lists every
+// pitch on it. The people who run the book get its actions in the header
+// (Enter mark, Sell or close, Manage holdings); everyone else gets plain
+// sentences in place of admin directions.
+//
 // The holding is located inside valueFund's output — an id that is not an
 // active holding of THIS fund is a notFound().
 
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowRightLeft,
+  ExternalLink,
+  PencilLine,
+} from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFundContext } from "@/lib/fund";
+import { can } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { valueFund } from "@/lib/valuation";
 import { getKeyStats } from "@/lib/yahoo";
@@ -25,14 +40,26 @@ import { couponSchedule } from "@/lib/bonds/accrued";
 import { interpolateYield } from "@/lib/bonds/treasury";
 import { StockChart } from "@/components/holdings/StockChart";
 import { KeyStatsCard } from "@/components/holdings/KeyStats";
-import { PriceSourceBadge } from "@/components/holdings/PriceSourceBadge";
+import {
+  PriceSourceBadge,
+  stalePriceReason,
+} from "@/components/holdings/PriceSourceBadge";
 import { ValueChart } from "@/components/charts/ValueChart";
+import { TicketCard } from "@/components/trades/TicketCard";
+import { AlumniNotice } from "@/components/ui/AlumniNotice";
 import { Card, CardHeader, StatCard } from "@/components/ui/Card";
 import { Badge, PitchStatusBadge } from "@/components/ui/Badge";
+import {
+  LinkButton,
+  ManageLink,
+  PageHeader,
+} from "@/components/ui/PageHeader";
+import { SectorLink } from "@/components/ui/SectorLink";
 import { SecurityLogo } from "@/components/holdings/SecurityLogo";
 import {
   HoldingTradesTable,
   MarkHistoryTable,
+  type TradePitch,
 } from "@/components/tables/HoldingDetailTables";
 import {
   easternDateString,
@@ -48,10 +75,12 @@ import {
 import type {
   BondMark,
   ChartPoint,
+  FundSlug,
   Holding,
   HoldingValuation,
   Pitch,
   Trade,
+  TradeTicket,
   TreasuryCurvePoint,
 } from "@/types/domain";
 
@@ -152,32 +181,87 @@ const thClass =
   "px-3 py-2.5 text-xs font-medium text-muted sm:px-4";
 const tdClass = "px-3 py-2.5 text-xs sm:px-4 sm:py-3 sm:text-sm";
 
+const inlineLink = "font-medium text-accent-text hover:underline";
+
+/** The title a holding goes by everywhere: a bond's name, else its ticker. */
+function holdingLabel(h: Pick<Holding, "instrument_type" | "symbol" | "name">) {
+  return BOND_TYPES.has(h.instrument_type) ? h.name : h.symbol ?? h.name;
+}
+
+/**
+ * PostgREST `or` filter matching this security on a ticket or pitch row: the
+ * holding itself, or (for rows written before the holding existed) its
+ * symbol or CUSIP.
+ */
+function securityMatch(h: Holding, extra: string[] = []): string {
+  return [
+    `holding_id.eq.${h.id}`,
+    h.symbol ? `symbol.eq."${h.symbol}"` : null,
+    h.cusip ? `cusip.eq."${h.cusip}"` : null,
+    ...extra,
+  ]
+    .filter(Boolean)
+    .join(",");
+}
+
 // ── Shared sections ─────────────────────────────────────────────────────────
 
-function TradesCard({ trades, isBond }: { trades: Trade[]; isBond: boolean }) {
+function TradesCard({
+  trades,
+  isBond,
+  fund,
+  pitchByTicket,
+  tradesHref,
+}: {
+  trades: Trade[];
+  isBond: boolean;
+  fund: FundSlug;
+  pitchByTicket: Record<string, TradePitch>;
+  tradesHref: string;
+}) {
   return (
     <Card className="overflow-hidden">
-      <CardHeader title="Position history" />
-      <HoldingTradesTable trades={trades} isBond={isBond} />
+      <CardHeader
+        title="Position history"
+        action={
+          trades.length > 0 ? (
+            <Link href={tradesHref} className={`text-sm ${inlineLink}`}>
+              View trades
+            </Link>
+          ) : undefined
+        }
+      />
+      <HoldingTradesTable
+        trades={trades}
+        isBond={isBond}
+        fund={fund}
+        pitchByTicket={pitchByTicket}
+      />
     </Card>
   );
 }
 
-function PitchesCard({ pitches, slug }: { pitches: Pitch[]; slug: string }) {
+function PitchesCard({
+  pitches,
+  fund,
+  empty,
+}: {
+  pitches: Pitch[];
+  fund: FundSlug;
+  /** What to say, and offer, when no pitch names this holding. */
+  empty: ReactNode;
+}) {
   return (
     <Card className="overflow-hidden">
       <CardHeader title="Pitches" />
       {pitches.length === 0 ? (
-        <p className="p-6 text-sm text-muted">
-          No pitches reference this holding yet. Sector members can start one
-          from their sector page.
-        </p>
+        <p className="p-6 text-sm text-muted">{empty}</p>
       ) : (
         <div className="divide-y divide-card-border/50">
           {pitches.map((p) => (
             <Link
               key={p.id}
-              href={`/${slug}/pitches/${p.id}`}
+              href={`/${fund}/pitches/${p.id}`}
               className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-highlight sm:px-6"
             >
               <div className="min-w-0">
@@ -195,6 +279,28 @@ function PitchesCard({ pitches, slug }: { pitches: Pitch[]; slug: string }) {
   );
 }
 
+// ── Metadata ────────────────────────────────────────────────────────────────
+
+/** The tab reads "ANET · Athena · SMIF Hub", the same name as the H1. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ fund: string; id: string }>;
+}): Promise<Metadata> {
+  const { fund: slug, id } = await params;
+  const ctx = await getFundContext(slug);
+  if (!ctx || !ctx.canViewCurrent) return { title: "Holdings" };
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
+    .from("holdings")
+    .select("instrument_type, symbol, name")
+    .eq("fund_id", ctx.fund.id)
+    .eq("id", id)
+    .maybeSingle();
+  const h = data as Pick<Holding, "instrument_type" | "symbol" | "name"> | null;
+  return { title: h ? holdingLabel(h) : "Holdings" };
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default async function HoldingDetailPage({
@@ -205,6 +311,17 @@ export default async function HoldingDetailPage({
   const { fund: slug, id } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
+  const fund = ctx.fund.slug;
+  const back = { href: `/${fund}/holdings`, label: "Holdings" };
+
+  if (!ctx.canViewCurrent) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Holdings" back={back} />
+        <AlumniNotice fundName={ctx.fund.name} />
+      </div>
+    );
+  }
 
   const supabase = await createSupabaseServerClient();
   const valuation = await valueFund(supabase, ctx.fund.id);
@@ -220,6 +337,21 @@ export default async function HoldingDetailPage({
   const avgCost = Number(h.avg_cost);
   const unrealizedPct =
     v.costBasis > 0 ? (v.unrealizedGain / v.costBasis) * 100 : null;
+  const sector = h.sector_id
+    ? valuation.sectors.find((s) => s.sectorId === h.sector_id) ?? null
+    : null;
+
+  // Who may do what from here. Manage holdings and executing tickets are the
+  // same people today (the PM, the advisor, app admins); asked separately so
+  // each link follows its own page's gate.
+  const manages = can(ctx, "manage_holdings");
+  const executes = can(ctx, "execute_ticket");
+  const markable =
+    h.pricing_method === "manual" || h.pricing_method === "treasury_curve";
+  const adminHref = `/${fund}/admin/holdings?holding=${h.id}#holding-${h.id}`;
+  const markHref = `/${fund}/admin/holdings?holding=${h.id}&mode=mark#holding-${h.id}`;
+  const sellHref = `/${fund}/admin/tickets?holding=${h.id}&action=sell`;
+  const tradesHref = `/${fund}/trades?symbol=${encodeURIComponent(h.symbol ?? h.name)}`;
 
   const tradesPromise = supabase
     .from("trades")
@@ -229,17 +361,38 @@ export default async function HoldingDetailPage({
     .order("trade_date", { ascending: false })
     .then(({ data }) => (data as Trade[] | null) ?? []);
 
-  let pitchQuery = supabase
-    .from("pitches")
+  // Tickets for this security: the pending ones are shown, and the pitch on
+  // any of them (executed too) counts as a pitch behind the position.
+  const ticketsPromise = supabase
+    .from("trade_tickets")
     .select("*")
     .eq("fund_id", ctx.fund.id)
-    .order("created_at", { ascending: false });
-  pitchQuery = h.symbol
-    ? pitchQuery.or(`holding_id.eq.${h.id},symbol.eq."${h.symbol}"`)
-    : pitchQuery.eq("holding_id", h.id);
-  const pitchesPromise = pitchQuery.then(
-    ({ data }) => (data as Pitch[] | null) ?? []
-  );
+    .in("status", ["pending", "executed"])
+    .or(securityMatch(h))
+    .order("created_at", { ascending: false })
+    .then(({ data }) => (data as TradeTicket[] | null) ?? []);
+
+  const pitchesPromise = ticketsPromise.then(async (tickets) => {
+    const fromTickets = [
+      ...new Set(
+        tickets
+          .map((t) => t.pitch_id)
+          .filter((pid): pid is string => pid !== null)
+      ),
+    ];
+    const { data } = await supabase
+      .from("pitches")
+      .select("*")
+      .eq("fund_id", ctx.fund.id)
+      .or(
+        securityMatch(
+          { ...h, cusip: null },
+          fromTickets.length > 0 ? [`id.in.(${fromTickets.join(",")})`] : []
+        )
+      )
+      .order("created_at", { ascending: false });
+    return (data as Pitch[] | null) ?? [];
+  });
 
   const marksPromise: PromiseLike<BondMark[]> = isBond
     ? supabase
@@ -253,12 +406,27 @@ export default async function HoldingDetailPage({
   const keyStatsPromise: Promise<Record<string, number | string | null>> =
     isChartable && h.symbol ? getKeyStats(h.symbol) : Promise.resolve({});
 
-  const [trades, pitches, marks, keyStats] = await Promise.all([
+  const [trades, tickets, pitches, marks, keyStats] = await Promise.all([
     tradesPromise,
+    ticketsPromise,
     pitchesPromise,
     marksPromise,
     keyStatsPromise,
   ]);
+
+  const pitchTitle = new Map(pitches.map((p) => [p.id, p.title]));
+  const pitchByTicket: Record<string, TradePitch> = {};
+  for (const t of tickets) {
+    const title = t.pitch_id ? pitchTitle.get(t.pitch_id) : undefined;
+    if (t.pitch_id && title) pitchByTicket[t.id] = { id: t.pitch_id, title };
+  }
+  // A pending ticket for another holding of the same symbol is not this
+  // one's; a ticket with no holding yet (a buy from a pitch) is.
+  const pending = tickets.filter(
+    (t) =>
+      t.status === "pending" && (t.holding_id === null || t.holding_id === h.id)
+  );
+  const sectorById = new Map(valuation.sectors.map((s) => [s.sectorId, s]));
 
   const spreads =
     isBond && marks.length > 0
@@ -281,72 +449,145 @@ export default async function HoldingDetailPage({
     markChartData.length < 2 ||
     markChartData[markChartData.length - 1].value >= markChartData[0].value;
 
+  const staleMarkDays = Number(ctx.fund.settings?.stale_mark_days ?? 7);
+
+  // What a stale price means, and who can do something about it.
+  let staleFix: ReactNode = null;
+  if (v.stale && markable) {
+    staleFix = manages ? (
+      <Link href={markHref} className={inlineLink}>
+        Enter mark
+      </Link>
+    ) : (
+      "The portfolio manager enters marks."
+    );
+  }
+
+  const pitchesEmpty: ReactNode = (() => {
+    const draftsHere =
+      sector !== null && can(ctx, "draft_pitch", { sectorId: sector.sectorId });
+    if (draftsHere) {
+      return (
+        <>
+          No pitches name this holding yet.{" "}
+          <Link
+            href={`/${fund}/pitches/new?sector=${sector.sectorSlug}`}
+            className={inlineLink}
+          >
+            New pitch
+          </Link>
+        </>
+      );
+    }
+    if (sector) {
+      return (
+        <>
+          No pitches name this holding yet. Its sector&apos;s members pitch it
+          from the{" "}
+          <SectorLink
+            fund={fund}
+            slug={sector.sectorSlug}
+            name={sector.sectorName}
+            className={inlineLink}
+          />{" "}
+          page.
+        </>
+      );
+    }
+    return "No pitches name this holding yet.";
+  })();
+
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div>
-        <Link
-          href={`/${slug}/holdings`}
-          className="inline-flex items-center gap-1 text-xs text-muted transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-          Holdings
-        </Link>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
+      <PageHeader
+        back={back}
+        title={
+          <span className="flex items-center gap-3">
             {!isBond && h.symbol && (
-              <SecurityLogo
-                symbol={h.symbol}
-                name={h.name}
-                size="lg"
-                className="mt-0.5"
-              />
+              <SecurityLogo symbol={h.symbol} name={h.name} size="lg" />
             )}
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                {isBond ? h.name : h.symbol ?? h.name}
-              </h1>
-              {!isBond && h.symbol && (
-                <p className="mt-0.5 text-sm text-muted">{h.name}</p>
-              )}
-              {isBond && h.issuer && (
-                <p className="mt-0.5 text-sm text-muted">{h.issuer}</p>
-              )}
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge tone="accent">
-                  {TYPE_LABELS[h.instrument_type] ?? h.instrument_type}
-                </Badge>
-                {v.sectorName && <Badge>{v.sectorName}</Badge>}
-                {h.rating && <Badge tone="info">{h.rating}</Badge>}
-                {h.cusip && (
-                  <span className="text-xs text-muted">CUSIP {h.cusip}</span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-semibold tabular-nums">
-              {isBond ? formatBondPrice(v.price) : formatCurrency(v.price)}
-            </p>
-            <div className="mt-1 flex items-center justify-end gap-2">
-              {!isBond && v.dayChange !== null && (
-                <span
-                  className={`text-sm font-medium tabular-nums ${gainClass(v.dayChange)}`}
+            <span className="min-w-0">{holdingLabel(h)}</span>
+          </span>
+        }
+        description={
+          !isBond && h.symbol ? h.name : isBond && h.issuer ? h.issuer : undefined
+        }
+        actions={
+          manages || executes ? (
+            <>
+              {manages && markable && (
+                <LinkButton
+                  href={markHref}
+                  variant={v.stale ? "primary" : "secondary"}
                 >
-                  {formatSignedCurrency(v.dayChange)} (
-                  {formatSignedPercent(v.dayChangePct)})
-                </span>
+                  <PencilLine className="h-4 w-4" aria-hidden="true" />
+                  Enter mark
+                </LinkButton>
               )}
-              {(isBond || v.stale || v.priceSource !== "live") && (
-                <PriceSourceBadge
-                  source={v.priceSource}
-                  markedAt={v.markedAt}
-                  stale={v.stale}
-                />
+              {executes && (
+                <LinkButton href={sellHref} variant="secondary">
+                  <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />
+                  Sell or close
+                </LinkButton>
               )}
-            </div>
-          </div>
+              {manages && (
+                <ManageLink href={adminHref}>Manage holdings</ManageLink>
+              )}
+            </>
+          ) : undefined
+        }
+      />
+
+      {/* Price, where it came from, and what the security is */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-2xl font-semibold tabular-nums">
+            {isBond ? formatBondPrice(v.price) : formatCurrency(v.price)}
+          </span>
+          {!isBond && v.dayChange !== null && (
+            <span
+              className={`text-sm font-medium tabular-nums ${gainClass(v.dayChange)}`}
+            >
+              {formatSignedCurrency(v.dayChange)} (
+              {formatSignedPercent(v.dayChangePct)})
+            </span>
+          )}
+          <PriceSourceBadge
+            source={v.priceSource}
+            markedAt={v.markedAt}
+            stale={v.stale}
+            price={v.price}
+          />
+          <span className="hidden h-4 w-px bg-card-border sm:block" aria-hidden="true" />
+          <Badge tone="accent">
+            {TYPE_LABELS[h.instrument_type] ?? h.instrument_type}
+          </Badge>
+          {sector && (
+            <Badge>
+              <SectorLink
+                fund={fund}
+                slug={sector.sectorSlug}
+                name={sector.sectorName}
+              />
+            </Badge>
+          )}
+          {h.rating && <Badge tone="info">{h.rating}</Badge>}
+          {h.cusip && (
+            <span className="text-xs text-muted">CUSIP {h.cusip}</span>
+          )}
         </div>
+        {v.stale && (
+          <p className="text-sm text-muted">
+            <span className="font-medium text-foreground">Stale price.</span>{" "}
+            {stalePriceReason({
+              source: v.priceSource,
+              markedAt: v.markedAt,
+              price: v.price,
+              staleMarkDays,
+            })}
+            {staleFix && <> {staleFix}</>}
+          </p>
+        )}
       </div>
 
       {/* Position stats */}
@@ -408,11 +649,63 @@ export default async function HoldingDetailPage({
         )}
       </div>
 
+      {/* Pending tickets: what is about to happen to this position */}
+      {pending.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold sm:text-lg">
+            Pending tickets
+            <span className="ml-2 text-sm font-normal text-muted tabular-nums">
+              {pending.length}
+            </span>
+          </h2>
+          <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+            {pending.map((t) => (
+              <TicketCard
+                key={t.id}
+                id={`ticket-${t.id}`}
+                ticket={t}
+                fund={fund}
+                sectorName={
+                  t.sector_id ? sectorById.get(t.sector_id)?.sectorName ?? null : null
+                }
+                sectorSlug={
+                  t.sector_id ? sectorById.get(t.sector_id)?.sectorSlug ?? null : null
+                }
+                pitchTitle={t.pitch_id ? pitchTitle.get(t.pitch_id) ?? null : null}
+                footer={
+                  executes ? (
+                    <Link
+                      href={`/${fund}/admin/tickets#ticket-${t.id}`}
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-text hover:underline"
+                    >
+                      Record execution
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Link>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <p className="text-muted">
+                        Waiting to be executed by the portfolio manager.
+                      </p>
+                      <Link
+                        href={`/${fund}/trades#ticket-${t.id}`}
+                        className={inlineLink}
+                      >
+                        View trades
+                      </Link>
+                    </div>
+                  )
+                }
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Equity/ETF: price chart + key stats */}
       {isChartable && h.symbol && (
         <>
           <Card className="p-4 sm:p-6">
-            <StockChart symbol={h.symbol} fund={ctx.fund.slug} />
+            <StockChart symbol={h.symbol} fund={fund} />
           </Card>
           <KeyStatsCard stats={keyStats} symbol={h.symbol} />
         </>
@@ -422,12 +715,45 @@ export default async function HoldingDetailPage({
       {isBond && (
         <>
           <Card className="overflow-hidden">
-            <CardHeader title="Mark history" />
+            <CardHeader
+              title="Mark history"
+              action={
+                manages && markable && marks.length > 0 ? (
+                  <Link href={markHref} className={`text-sm ${inlineLink}`}>
+                    Enter mark
+                  </Link>
+                ) : undefined
+              }
+            />
             {marks.length === 0 ? (
               <p className="p-6 text-sm text-muted">
-                {h.pricing_method === "manual"
-                  ? "No marks yet. The PM enters one under Admin → Holdings (“Enter mark”) or uploads a marks CSV."
-                  : "No manual marks — this bond is priced automatically. The PM can still enter a mark under Admin → Holdings to override."}
+                {h.pricing_method === "manual" ? (
+                  manages ? (
+                    <>
+                      No marks yet.{" "}
+                      <Link href={markHref} className={inlineLink}>
+                        Enter mark
+                      </Link>
+                    </>
+                  ) : (
+                    "No marks yet. The portfolio manager enters them."
+                  )
+                ) : h.pricing_method === "treasury_curve" ? (
+                  manages ? (
+                    <>
+                      No manual marks: this bond is priced off the Treasury
+                      curve.{" "}
+                      <Link href={markHref} className={inlineLink}>
+                        Enter mark
+                      </Link>{" "}
+                      to override it.
+                    </>
+                  ) : (
+                    "No manual marks: this bond is priced off the Treasury curve."
+                  )
+                ) : (
+                  "No manual marks: this bond is priced from a live quote."
+                )}
               </p>
             ) : (
               <>
@@ -436,7 +762,7 @@ export default async function HoldingDetailPage({
                     <ValueChart
                       data={markChartData}
                       isPositive={marksUp}
-                      fund={ctx.fund.slug}
+                      fund={fund}
                       height={190}
                     />
                   </div>
@@ -465,8 +791,19 @@ export default async function HoldingDetailPage({
             />
             {schedule.length === 0 ? (
               <p className="p-6 text-sm text-muted">
-                No remaining cash flows to show — check the bond&apos;s coupon,
-                payment frequency, and maturity fields under Admin → Holdings.
+                No remaining cash flows to show.{" "}
+                {manages ? (
+                  <>
+                    Check the bond&apos;s coupon, payment frequency and maturity
+                    in{" "}
+                    <Link href={adminHref} className={inlineLink}>
+                      Manage holdings
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  "The bond's coupon or maturity details may be missing."
+                )}
               </p>
             ) : (
               <div className="max-h-72 overflow-auto">
@@ -514,9 +851,19 @@ export default async function HoldingDetailPage({
             <div className="min-w-0">
               <p className="text-sm font-medium">FINRA TRACE</p>
               <p className="mt-0.5 text-xs text-muted">
-                {h.cusip
-                  ? `Search CUSIP ${h.cusip} on FINRA's Bond Center to eyeball recent TRACE prints.`
-                  : "No CUSIP on file — the PM can add one under Admin → Holdings to enable TRACE lookups."}
+                {h.cusip ? (
+                  `Search CUSIP ${h.cusip} on FINRA's Bond Center to eyeball recent TRACE prints.`
+                ) : manages ? (
+                  <>
+                    No CUSIP on file. Add one in{" "}
+                    <Link href={adminHref} className={inlineLink}>
+                      Manage holdings
+                    </Link>{" "}
+                    to look up TRACE prints.
+                  </>
+                ) : (
+                  "No CUSIP on file, so TRACE prints can't be looked up."
+                )}
               </p>
             </div>
             {h.cusip && (
@@ -534,8 +881,14 @@ export default async function HoldingDetailPage({
         </>
       )}
 
-      <TradesCard trades={trades} isBond={isBond} />
-      <PitchesCard pitches={pitches} slug={slug} />
+      <TradesCard
+        trades={trades}
+        isBond={isBond}
+        fund={fund}
+        pitchByTicket={pitchByTicket}
+        tradesHref={tradesHref}
+      />
+      <PitchesCard pitches={pitches} fund={fund} empty={pitchesEmpty} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { SectorLink } from "@/components/ui/SectorLink";
 import { easternDateString } from "@/lib/format";
 import type { Sector, SectorTarget } from "@/types/domain";
 
@@ -90,7 +91,9 @@ export function SectorsAdmin({
               s.is_active ? "" : "opacity-45"
             }`}
           >
-            <div className="flex min-w-0 flex-1 items-center gap-2">
+            {/* The minimum width wraps the controls under the name on a
+                phone instead of squeezing the name to nothing. */}
+            <div className="flex min-w-[8rem] flex-1 items-center gap-2">
               {renaming?.id === s.id ? (
                 <form onSubmit={commitRename} className="min-w-0 flex-1">
                   <input
@@ -108,7 +111,12 @@ export function SectorsAdmin({
                   />
                 </form>
               ) : (
-                <span className="truncate font-medium">{s.name}</span>
+                <SectorLink
+                  fund={fund}
+                  slug={s.is_active ? s.slug : null}
+                  name={s.name}
+                  className="truncate font-medium"
+                />
               )}
               {s.is_strategy_team && (
                 <Badge className="shrink-0" tone="info">
@@ -151,7 +159,7 @@ export function SectorsAdmin({
                   onClick={() =>
                     patch(s.id, { is_strategy_team: !s.is_strategy_team })
                   }
-                  className="cursor-pointer whitespace-nowrap text-xs text-accent hover:underline"
+                  className="cursor-pointer whitespace-nowrap text-xs text-accent-text hover:underline"
                 >
                   {s.is_strategy_team ? "unset strategy" : "set strategy"}
                 </button>
@@ -260,8 +268,13 @@ export function SectorTargetsForm({
           key={r.sector_id}
           className="grid grid-cols-[minmax(0,1fr)_68px_68px] sm:grid-cols-[minmax(0,1fr)_100px_100px] items-center gap-2"
         >
-          <span className="text-sm">{r.name}</span>
+          {/* Plain text, not a SectorLink: a stray tap here would leave the
+              page and drop every weight typed so far. */}
+          <label htmlFor={`target-${r.sector_id}`} className="text-sm">
+            {r.name}
+          </label>
           <input
+            id={`target-${r.sector_id}`}
             type="number"
             step="0.1"
             min="0"
@@ -278,6 +291,7 @@ export function SectorTargetsForm({
             min="0"
             max="100"
             value={r.benchmark}
+            aria-label={`${r.name} benchmark %`}
             onChange={(e) =>
               setRows(rows.map((x, j) => (j === i ? { ...x, benchmark: e.target.value } : x)))
             }

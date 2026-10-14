@@ -3,10 +3,13 @@
 // estimated size — plus who created it and the linked pitch. The pages that
 // render it decide what goes in `footer`: nothing (read-only member view), a
 // "Record execution" link, or the full ExecuteTicketForm on the admin page.
+// The security links to its holding page and the sector chip to the sector,
+// so a ticket is one click from everything it touches.
 
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
+import { SectorLink } from "@/components/ui/SectorLink";
 import {
   formatBondPrice,
   formatCurrency,
@@ -47,16 +50,23 @@ function estCell(label: string, value: ReactNode) {
 }
 
 export function TicketCard({
+  id,
   ticket,
   fund,
   sectorName,
+  sectorSlug,
   pitchTitle,
   createdByName,
   footer,
 }: {
+  /** Anchor for links to this ticket, e.g. "ticket-<id>". Leave it off where
+   *  the page wraps the card in its own anchor (admin tickets does). */
+  id?: string;
   ticket: TradeTicket;
   fund: FundSlug;
   sectorName?: string | null;
+  /** Makes the sector chip a link to the sector page. */
+  sectorSlug?: string | null;
   pitchTitle?: string | null;
   createdByName?: string | null;
   footer?: ReactNode;
@@ -69,7 +79,12 @@ export function TicketCard({
     ticket.est_amount !== null ? Number(ticket.est_amount) : null;
 
   return (
-    <div className="glass-card p-4 sm:p-5">
+    <div
+      id={id}
+      className={`glass-card p-4 sm:p-5 ${
+        id ? "scroll-mt-20 target:ring-2 target:ring-accent-text lg:scroll-mt-6" : ""
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={ticket.action === "buy" ? "gain" : "loss"}>
           {ticket.action.toUpperCase()}
@@ -77,7 +92,11 @@ export function TicketCard({
         <Badge tone="neutral">
           {TYPE_LABELS[ticket.instrument_type] ?? ticket.instrument_type}
         </Badge>
-        {sectorName && <Badge tone="accent">{sectorName}</Badge>}
+        {sectorName && (
+          <Badge tone="accent">
+            <SectorLink fund={fund} slug={sectorSlug} name={sectorName} />
+          </Badge>
+        )}
         <span className="ml-auto text-xs text-muted">
           Created {formatDate(ticket.created_at)}
           {createdByName ? ` by ${createdByName}` : ""}
@@ -85,7 +104,18 @@ export function TicketCard({
       </div>
 
       <div className="mt-3">
-        <p className="font-semibold">{ticket.name}</p>
+        <p className="font-semibold">
+          {ticket.holding_id ? (
+            <Link
+              href={`/${fund}/holdings/${ticket.holding_id}`}
+              className="hover:underline"
+            >
+              {ticket.name}
+            </Link>
+          ) : (
+            ticket.name
+          )}
+        </p>
         <p className="text-xs text-muted">
           {[
             ticket.symbol,
@@ -124,7 +154,7 @@ export function TicketCard({
           From pitch{" "}
           <Link
             href={`/${fund}/pitches/${ticket.pitch_id}`}
-            className="font-medium text-accent hover:underline"
+            className="font-medium text-accent-text hover:underline"
           >
             {pitchTitle ?? "view pitch"}
           </Link>

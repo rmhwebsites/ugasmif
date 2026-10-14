@@ -1,17 +1,23 @@
-// /[fund]/admin/pitches — the officer's pitch desk (SPEC 11.3): schedule
-// submitted pitches to a class date, open/close voting, see the live tally,
-// see who has not voted, and send reminders. Officer-gated; the officer's
-// votes RLS is what makes the non-voter diff possible server-side.
+// /[fund]/admin/pitches, "Manage pitches": the officer's pitch desk
+// (SPEC 11.3). Schedule submitted pitches to a class date, open/close
+// voting, see the live tally, see who has not voted, and send reminders.
+// Officers get the controls. The faculty advisor, who may see individual
+// ballots, gets the same page read-only for the tally and the "Has not
+// voted" list. Officer and advisor votes RLS is what makes the non-voter
+// diff possible server-side. Sections carry ids (awaiting, scheduled,
+// voting) so the checklist can link straight to them.
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarClock, Hourglass, Vote } from "lucide-react";
 import { getAuthState, getFundContext } from "@/lib/fund";
-import { isOfficer } from "@/lib/permissions";
+import { can, canOpenAdminSection } from "@/lib/permissions";
 import { voteRule } from "@/lib/votes";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge, PitchStatusBadge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageHeader, ViewLink } from "@/components/ui/PageHeader";
+import { SectorLink } from "@/components/ui/SectorLink";
 import { ScheduleControls } from "@/components/pitch/ScheduleControls";
 import { TallyCard, type TallyVoter } from "@/components/pitch/TallyCard";
 import { pitchActionLine } from "@/components/pitch/PitchCard";
@@ -22,9 +28,12 @@ import {
   formatPercent,
 } from "@/lib/format";
 import type { Meeting, Pitch, VoteChoice } from "@/types/domain";
+import { adminTitle } from "../admin-metadata";
+
+export const generateMetadata = adminTitle("pitches", "Manage pitches");
 
 interface AdminPitch extends Pitch {
-  sector: { name: string } | null;
+  sector: { name: string; slug: string | null } | null;
   author: { full_name: string } | null;
 }
 
@@ -62,7 +71,16 @@ function PitchHeading({
       </div>
       <p className="mt-0.5 text-xs text-muted">
         {pitchActionLine(pitch)}
-        {pitch.sector?.name ? ` · ${pitch.sector.name}` : ""}
+        {pitch.sector?.name && (
+          <>
+            {" · "}
+            <SectorLink
+              fund={slug}
+              slug={pitch.sector.slug}
+              name={pitch.sector.name}
+            />
+          </>
+        )}
         {pitch.author?.full_name ? ` · ${pitch.author.full_name}` : ""}
         {` · updated ${formatDate(pitch.updated_at)}`}
       </p>
@@ -78,13 +96,16 @@ export default async function AdminPitchesPage({
   const { fund: slug } = await params;
   const ctx = await getFundContext(slug);
   if (!ctx) notFound();
-  if (!isOfficer(ctx)) notFound();
+  if (!canOpenAdminSection(ctx, "pitches")) notFound();
+  // Officers schedule, open and close votes; the advisor reads.
+  const canSchedule = can(ctx, "schedule_pitch");
+  const canWithdraw = can(ctx, "withdraw_pitch");
 
   const { supabase } = await getAuthState();
   const [pitchesRes, meetingsRes, membersRes] = await Promise.all([
     supabase
       .from("pitches")
-      .select("*, sector:sectors(name), author:profiles!author_id(full_name)")
+      .select("*, sector:sectors(name, slug), author:profiles!author_id(full_name)")
       .eq("fund_id", ctx.fund.id)
       .in("status", ["submitted", "scheduled", "voting", "passed", "failed"])
       .order("created_at", { ascending: false }),
@@ -135,186 +156,193 @@ export default async function AdminPitchesPage({
   const windowHours = Number(ctx.fund.vote_default_window_hours);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Pitch scheduling</h1>
-        <p className="text-xs text-muted sm:text-sm">
-          Schedule submitted pitches to a class date, open the vote after the
-          presentation, and close it (the nightly job closes expired windows on
-          its own).
-        </p>
-      </div>
+    <div className="space-y-4 sm:space-y-6">
+      <PageHeader
+        title="Manage pitches"
+        description={
+          canSchedule
+            ? "Schedule submitted pitches, open and close votes, see who hasn't voted"
+            : "See open votes and who hasn't voted. Officers schedule pitches and open votes."
+        }
+        actions={<ViewLink href={`/${slug}/pitches`}>View pitches</ViewLink>}
+      />
 
       {/* ── Awaiting scheduling ────────────────────────────────────────── */}
-      <Card>
-        <CardHeader
-          title={
-            <span className="flex items-center gap-2">
-              <Hourglass className="h-4 w-4 text-accent" /> Awaiting scheduling
-            </span>
-          }
-        />
-        <div className="space-y-3 p-3 sm:p-4">
-          {submitted.length === 0 ? (
-            <p className="px-2 py-4 text-center text-sm text-muted">
-              Nothing waiting. Sector leaders submit drafts from the pitch page
-              — submitted pitches land here.
-            </p>
-          ) : (
-            submitted.map((p) => (
-              <div key={p.id} className="rounded-xl border border-card-border p-3 sm:p-4">
-                <PitchHeading pitch={p} slug={slug} />
-                <div className="mt-3">
-                  <ScheduleControls
-                    fund={slug}
-                    pitchId={p.id}
-                    status={p.status}
-                    scheduledFor={p.scheduled_for}
-                    voteClosesAt={p.vote_closes_at}
-                    defaultWindowHours={windowHours}
-                    canSchedule
-                    canWithdraw
-                    meetingDates={meetingDates}
-                  />
+      <section id="awaiting" className="scroll-mt-20 lg:scroll-mt-6">
+        <Card>
+          <CardHeader
+            title={
+              <span className="flex items-center gap-2">
+                <Hourglass className="h-4 w-4 text-accent-text" /> Awaiting scheduling
+              </span>
+            }
+          />
+          <div className="space-y-3 p-3 sm:p-4">
+            {submitted.length === 0 ? (
+              <p className="px-2 py-4 text-center text-sm text-muted">
+                Nothing waiting. When a sector leader submits a draft from its
+                pitch page, it lands here.
+              </p>
+            ) : (
+              submitted.map((p) => (
+                <div key={p.id} className="rounded-xl border border-card-border p-3 sm:p-4">
+                  <PitchHeading pitch={p} slug={slug} />
+                  <div className="mt-3">
+                    <ScheduleControls
+                      fund={slug}
+                      pitchId={p.id}
+                      status={p.status}
+                      scheduledFor={p.scheduled_for}
+                      voteClosesAt={p.vote_closes_at}
+                      defaultWindowHours={windowHours}
+                      canSchedule={canSchedule}
+                      canWithdraw={canWithdraw}
+                      meetingDates={meetingDates}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
+              ))
+            )}
+          </div>
+        </Card>
+      </section>
 
       {/* ── Scheduled ──────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader
-          title={
-            <span className="flex items-center gap-2">
-              <CalendarClock className="h-4 w-4 text-accent" /> Scheduled
-            </span>
-          }
-        />
-        <div className="space-y-3 p-3 sm:p-4">
-          {scheduled.length === 0 ? (
-            <p className="px-2 py-4 text-center text-sm text-muted">
-              No pitches on the calendar. Schedule a submitted pitch above to a
-              class date.
-            </p>
-          ) : (
-            scheduled.map((p) => (
-              <div key={p.id} className="rounded-xl border border-card-border p-3 sm:p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <PitchHeading pitch={p} slug={slug} />
-                  <Badge tone="info">
-                    <CalendarClock className="h-3 w-3" />
-                    {formatDate(p.scheduled_for)}
-                  </Badge>
-                </div>
-                <div className="mt-3">
-                  <ScheduleControls
-                    fund={slug}
-                    pitchId={p.id}
-                    status={p.status}
-                    scheduledFor={p.scheduled_for}
-                    voteClosesAt={p.vote_closes_at}
-                    defaultWindowHours={windowHours}
-                    canSchedule
-                    canWithdraw
-                    meetingDates={meetingDates}
-                  />
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
-
-      {/* ── Voting now ─────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader
-          title={
-            <span className="flex items-center gap-2">
-              <Vote className="h-4 w-4 text-accent" /> Voting now
-            </span>
-          }
-        />
-        <div className="space-y-3 p-3 sm:p-4">
-          {voting.length === 0 ? (
-            <p className="px-2 py-4 text-center text-sm text-muted">
-              No open votes. Open one on a scheduled pitch after it&apos;s been
-              presented in class.
-            </p>
-          ) : (
-            voting.map((p) => {
-              const rows = votesByPitch.get(p.id) ?? [];
-              const yes = rows.filter((v) => v.choice === "yes").length;
-              const no = rows.filter((v) => v.choice === "no").length;
-              const votedIds = new Set(rows.map((v) => v.voter_id));
-              const nonVoters = members
-                .filter((m) => !votedIds.has(m.user_id))
-                .map((m) => m.profiles?.full_name ?? "Member");
-              const voters: TallyVoter[] = rows.map((v) => ({
-                name: v.voter?.full_name ?? "Member",
-                choice: v.choice,
-                comment: v.comment,
-                castAt: v.cast_at,
-              }));
-              return (
+      <section id="scheduled" className="scroll-mt-20 lg:scroll-mt-6">
+        <Card>
+          <CardHeader
+            title={
+              <span className="flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-accent-text" /> Scheduled
+              </span>
+            }
+          />
+          <div className="space-y-3 p-3 sm:p-4">
+            {scheduled.length === 0 ? (
+              <p className="px-2 py-4 text-center text-sm text-muted">
+                No pitches on the calendar. Schedule a submitted pitch above to a
+                class date.
+              </p>
+            ) : (
+              scheduled.map((p) => (
                 <div key={p.id} className="rounded-xl border border-card-border p-3 sm:p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <PitchHeading pitch={p} slug={slug} />
-                    <span className="text-xs text-muted">
-                      Closes {formatDateTime(p.vote_closes_at)} ET
-                    </span>
+                    <Badge tone="info">
+                      <CalendarClock className="h-3 w-3" />
+                      {formatDate(p.scheduled_for)}
+                    </Badge>
                   </div>
-                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                    <TallyCard
-                      yes={yes}
-                      no={no}
-                      eligible={p.eligible_voters}
-                      thresholdPct={voteRule(p, ctx.fund).thresholdPct}
-                      quorumPct={voteRule(p, ctx.fund).quorumPct}
-                      live
-                      voters={voters}
+                  <div className="mt-3">
+                    <ScheduleControls
+                      fund={slug}
+                      pitchId={p.id}
+                      status={p.status}
+                      scheduledFor={p.scheduled_for}
+                      voteClosesAt={p.vote_closes_at}
+                      defaultWindowHours={windowHours}
+                      canSchedule={canSchedule}
+                      canWithdraw={canWithdraw}
+                      meetingDates={meetingDates}
                     />
-                    <div>
-                      <p className="mb-2 text-xs font-medium text-muted">
-                        Has not voted ({nonVoters.length})
-                      </p>
-                      {nonVoters.length === 0 ? (
-                        <p className="text-sm text-gain">
-                          Everyone eligible has voted — close it whenever
-                          you&apos;re ready.
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
+      </section>
+
+      {/* ── Voting now ─────────────────────────────────────────────────── */}
+      <section id="voting" className="scroll-mt-20 lg:scroll-mt-6">
+        <Card>
+          <CardHeader
+            title={
+              <span className="flex items-center gap-2">
+                <Vote className="h-4 w-4 text-accent-text" /> Voting now
+              </span>
+            }
+          />
+          <div className="space-y-3 p-3 sm:p-4">
+            {voting.length === 0 ? (
+              <p className="px-2 py-4 text-center text-sm text-muted">
+                No open votes. Open one on a scheduled pitch after it&apos;s been
+                presented in class.
+              </p>
+            ) : (
+              voting.map((p) => {
+                const rows = votesByPitch.get(p.id) ?? [];
+                const yes = rows.filter((v) => v.choice === "yes").length;
+                const no = rows.filter((v) => v.choice === "no").length;
+                const votedIds = new Set(rows.map((v) => v.voter_id));
+                const nonVoters = members
+                  .filter((m) => !votedIds.has(m.user_id))
+                  .map((m) => m.profiles?.full_name ?? "Member");
+                const voters: TallyVoter[] = rows.map((v) => ({
+                  name: v.voter?.full_name ?? "Member",
+                  choice: v.choice,
+                  comment: v.comment,
+                  castAt: v.cast_at,
+                }));
+                return (
+                  <div key={p.id} className="rounded-xl border border-card-border p-3 sm:p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <PitchHeading pitch={p} slug={slug} />
+                      <span className="text-xs text-muted">
+                        Closes {formatDateTime(p.vote_closes_at)} ET
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      <TallyCard
+                        yes={yes}
+                        no={no}
+                        eligible={p.eligible_voters}
+                        thresholdPct={voteRule(p, ctx.fund).thresholdPct}
+                        quorumPct={voteRule(p, ctx.fund).quorumPct}
+                        live
+                        voters={voters}
+                      />
+                      <div>
+                        <p className="mb-2 text-xs font-medium text-muted">
+                          Has not voted ({nonVoters.length})
                         </p>
-                      ) : (
-                        <div className="flex flex-wrap gap-1.5">
-                          {nonVoters.map((name, i) => (
-                            <span
-                              key={`${name}-${i}`}
-                              className="rounded-full bg-highlight px-2.5 py-1 text-xs"
-                            >
-                              {name}
-                            </span>
-                          ))}
+                        {nonVoters.length === 0 ? (
+                          <p className="text-sm text-gain">
+                            Everyone eligible has voted.
+                            {canSchedule && " Close it whenever you're ready."}
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {nonVoters.map((name, i) => (
+                              <span
+                                key={`${name}-${i}`}
+                                className="rounded-full bg-highlight px-2.5 py-1 text-xs"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-4">
+                          <ScheduleControls
+                            fund={slug}
+                            pitchId={p.id}
+                            status={p.status}
+                            scheduledFor={p.scheduled_for}
+                            voteClosesAt={p.vote_closes_at}
+                            defaultWindowHours={windowHours}
+                            canSchedule={canSchedule}
+                          />
                         </div>
-                      )}
-                      <div className="mt-4">
-                        <ScheduleControls
-                          fund={slug}
-                          pitchId={p.id}
-                          status={p.status}
-                          scheduledFor={p.scheduled_for}
-                          voteClosesAt={p.vote_closes_at}
-                          defaultWindowHours={windowHours}
-                          canSchedule
-                        />
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Card>
+                );
+              })
+            )}
+          </div>
+        </Card>
+      </section>
 
       {/* ── Recently closed ────────────────────────────────────────────── */}
       {recentlyClosed.length > 0 ? (
@@ -352,7 +380,7 @@ export default async function AdminPitchesPage({
         pitches.length === 0 && (
           <EmptyState
             title="The pitch pipeline is empty"
-            hint="Sector teams draft pitches under Pitches → New pitch. Once a leader submits one, it shows up here for scheduling."
+            hint="Sector teams draft pitches from the Pitches page. Once a leader submits one, it shows up here for scheduling."
           />
         )
       )}

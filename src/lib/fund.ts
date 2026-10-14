@@ -141,16 +141,24 @@ export const getFundContext = cache(
   }
 );
 
+/**
+ * The order funds are listed in everywhere: the stock fund, then the bond
+ * fund, as the Athena | Arch switcher shows them. Alphabetical order would
+ * put Arch first.
+ */
+export const FUND_DISPLAY_ORDER: FundSlug[] = ["athena", "arch"];
+
+function byDisplayOrder(a: Fund, b: Fund): number {
+  return FUND_DISPLAY_ORDER.indexOf(a.slug) - FUND_DISPLAY_ORDER.indexOf(b.slug);
+}
+
 /** The funds this user can access, in display order — drives the switcher. */
 export const getAccessibleFunds = cache(async (): Promise<Fund[]> => {
   const { supabase, user, profile } = await getAuthState();
   if (!user || !profile) return [];
 
-  const { data: fundRows } = await supabase
-    .from("funds")
-    .select("*")
-    .order("slug");
-  const funds = (fundRows as Fund[]) ?? [];
+  const { data: fundRows } = await supabase.from("funds").select("*");
+  const funds = ((fundRows as Fund[]) ?? []).sort(byDisplayOrder);
 
   if (profile.is_app_admin || profile.is_faculty_advisor) return funds;
 
@@ -163,3 +171,36 @@ export const getAccessibleFunds = cache(async (): Promise<Fund[]> => {
   );
   return funds.filter((f) => memberFundIds.has(f.id));
 });
+
+/**
+ * How much this person has to do in a fund, lowest first: a seat this year
+ * with a role, then a viewer seat this year, then alumni access, then access
+ * through the advisor or app admin flag alone.
+ */
+function landingRank(ctx: FundContext | null): number {
+  if (!ctx) return 4;
+  const m = ctx.membership;
+  if (!m) return 3;
+  const thisYear =
+    m.status === "active" && m.academic_year_id === ctx.currentYear.id;
+  if (thisYear && m.role !== "viewer") return 0;
+  if (thisYear) return 1;
+  return 2;
+}
+
+/**
+ * Where "/" lands when no fund is remembered: the fund where this person has
+ * the most to do, ties going to display order (Athena first). `funds` comes
+ * from getAccessibleFunds(), which is already in display order.
+ */
+export async function pickLandingFund(funds: Fund[]): Promise<Fund | null> {
+  if (funds.length === 0) return null;
+  const ranks = await Promise.all(
+    funds.map(async (f) => landingRank(await getFundContext(f.slug)))
+  );
+  let best = 0;
+  for (let i = 1; i < funds.length; i++) {
+    if (ranks[i] < ranks[best]) best = i;
+  }
+  return funds[best];
+}

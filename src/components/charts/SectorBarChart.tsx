@@ -5,7 +5,10 @@
 // Target and benchmark only appear once some sector has one: an empty series
 // still reserves its slot in every row, which pushed the weight bar off its
 // label, and its legend entry promised data that was not there.
+// Rows whose data carries the sector's slug open that sector's page: the
+// name is a real link (keyboard, middle-click), and the bars click through.
 
+import { useRouter } from "next/navigation";
 import {
   BarChart,
   Bar,
@@ -14,6 +17,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  Text,
 } from "recharts";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { getChartTheme } from "@/lib/chartTheme";
@@ -26,6 +30,8 @@ interface Props {
     weight: number;
     target: number | null;
     benchmark: number | null;
+    /** The sector's slug; when present the row links to its page. */
+    slug?: string | null;
   }[];
   fund: FundSlug;
 }
@@ -37,6 +43,19 @@ function truncate(name: string, max = 26): string {
 export function SectorBarChart({ data, fund }: Props) {
   const { resolvedTheme } = useTheme();
   const theme = getChartTheme(resolvedTheme, fund);
+  const router = useRouter();
+
+  const hrefAt = (index: number): string | null => {
+    const slug = data[index]?.slug;
+    return slug ? `/${fund}/sectors/${slug}` : null;
+  };
+  // A bar hands back its own data row, so this reads the slug off it rather
+  // than trusting the bar's position among the drawn rectangles.
+  const openRow = (item: { payload?: { slug?: string | null } }) => {
+    const slug = item.payload?.slug;
+    if (slug) router.push(`/${fund}/sectors/${slug}`);
+  };
+  const linked = data.some((d) => d.slug);
 
   if (data.length === 0) {
     return (
@@ -73,8 +92,53 @@ export function SectorBarChart({ data, fund }: Props) {
             type="category"
             dataKey="name"
             width={132}
-            tickFormatter={(v: string) => truncate(v)}
-            tick={{ fill: theme.textColor, fontSize: 11 }}
+            tick={(props) => {
+              // The axis's own label (same wrapping and placement as the
+              // default tick), wrapped in a link when the row has a slug.
+              const href = hrefAt(props.payload.index ?? props.index);
+              const label = (
+                <Text
+                  {...props}
+                  fill={theme.textColor}
+                  fontSize={11}
+                  className={
+                    href
+                      ? "recharts-cartesian-axis-tick-value hover:underline"
+                      : "recharts-cartesian-axis-tick-value"
+                  }
+                >
+                  {truncate(String(props.payload.value))}
+                </Text>
+              );
+              if (!href) return label;
+              return (
+                <a
+                  href={href}
+                  aria-label={`Open ${String(props.payload.value)}`}
+                  onClick={(e) => {
+                    // Plain clicks stay in the app; modified clicks keep the
+                    // browser's new-tab behaviour.
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)
+                      return;
+                    e.preventDefault();
+                    router.push(href);
+                  }}
+                >
+                  <title>{`Open ${String(props.payload.value)}`}</title>
+                  {/* A 28px tall invisible target behind the 11px label, so
+                      the name is easy to tap on a phone. Rows sit 40px or
+                      more apart, so the targets never overlap. */}
+                  <rect
+                    x={Number(props.x) - 124}
+                    y={Number(props.y) - 14}
+                    width={128}
+                    height={28}
+                    fill="transparent"
+                  />
+                  {label}
+                </a>
+              );
+            }}
             axisLine={false}
             tickLine={false}
           />
@@ -110,6 +174,8 @@ export function SectorBarChart({ data, fund }: Props) {
             fill={theme.accent}
             radius={[0, 3, 3, 0]}
             maxBarSize={10}
+            cursor={linked ? "pointer" : undefined}
+            onClick={openRow}
           />
           {hasTarget && (
             <Bar
@@ -119,6 +185,8 @@ export function SectorBarChart({ data, fund }: Props) {
               fillOpacity={0.4}
               radius={[0, 3, 3, 0]}
               maxBarSize={10}
+              cursor={linked ? "pointer" : undefined}
+              onClick={openRow}
             />
           )}
           {hasBenchmark && (
@@ -128,6 +196,8 @@ export function SectorBarChart({ data, fund }: Props) {
               fill={theme.benchmark}
               radius={[0, 3, 3, 0]}
               maxBarSize={10}
+              cursor={linked ? "pointer" : undefined}
+              onClick={openRow}
             />
           )}
         </BarChart>

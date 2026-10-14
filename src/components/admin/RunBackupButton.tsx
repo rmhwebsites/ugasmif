@@ -25,7 +25,7 @@ export function RunBackupButton() {
     <div className="flex items-center gap-2">
       {state === "done" && <span className="text-sm text-gain">Backed up</span>}
       {state === "error" && (
-        <span className="text-sm text-loss">Backup failed — check health</span>
+        <span className="text-sm text-loss">Backup failed. Try again.</span>
       )}
       <Button
         variant="secondary"

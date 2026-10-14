@@ -10,6 +10,9 @@ import type { AuditLogEntry } from "@/types/domain";
 
 export interface AuditRow extends AuditLogEntry {
   actorName: string;
+  /** Plain names for the codes, e.g. "Roster change" for membership.update. */
+  actionLabel: string;
+  entityLabel: string;
 }
 
 const columns: SortableColumn<AuditRow>[] = [
@@ -26,7 +29,7 @@ const columns: SortableColumn<AuditRow>[] = [
   },
   {
     key: "actor",
-    label: "Actor",
+    label: "Who",
     align: "left",
     defaultDir: "asc",
     sortValue: (e) => e.actorName,
@@ -34,19 +37,28 @@ const columns: SortableColumn<AuditRow>[] = [
   },
   {
     key: "action",
-    label: "Action",
+    label: "What happened",
     align: "left",
     defaultDir: "asc",
-    sortValue: (e) => e.action,
-    render: (e) => <span className="font-medium">{e.action}</span>,
+    sortValue: (e) => e.actionLabel,
+    // The code stays on hover for anyone matching it against the database.
+    render: (e) => (
+      <span className="font-medium" title={e.action}>
+        {e.actionLabel}
+      </span>
+    ),
   },
   {
     key: "entity",
-    label: "Entity",
+    label: "Record",
     align: "left",
     defaultDir: "asc",
-    sortValue: (e) => e.entity,
-    render: (e) => <span className="text-muted">{e.entity}</span>,
+    sortValue: (e) => e.entityLabel,
+    render: (e) => (
+      <span className="text-muted" title={e.entity}>
+        {e.entityLabel}
+      </span>
+    ),
   },
   {
     key: "detail",
@@ -55,8 +67,8 @@ const columns: SortableColumn<AuditRow>[] = [
     render: (e) =>
       e.before || e.after ? (
         <details>
-          <summary className="cursor-pointer text-xs text-accent">
-            before / after
+          <summary className="cursor-pointer text-xs text-accent-text">
+            Before and after
           </summary>
           <pre className="mt-1 max-w-md overflow-x-auto rounded bg-highlight p-2 text-[10px] leading-relaxed">
             {JSON.stringify({ before: e.before, after: e.after }, null, 2)}

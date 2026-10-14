@@ -1,9 +1,10 @@
 // /[fund]/admin/sectors — manage sectors and set target/benchmark weights
 // (SPEC 11.3). Officers manage the sectors themselves; the strategy-team
 // leader (Equity Strategies / Macro) reaches this page for the targets form
-// and nothing else.
+// and nothing else. The targets come first, at #targets, because setting
+// them is what most visits are for.
 
-import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { can, isOfficer, leadsStrategyTeam } from "@/lib/permissions";
@@ -13,9 +14,11 @@ import {
   SectorTargetsForm,
 } from "@/components/admin/SectorsAdmin";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { PageHeader, ViewLink } from "@/components/ui/PageHeader";
 import type { Sector, SectorTarget } from "@/types/domain";
+import { adminTitle } from "../admin-metadata";
 
-export const metadata: Metadata = { title: "Manage sectors" };
+export const generateMetadata = adminTitle("sectors", "Manage sectors");
 
 export default async function SectorsAdminPage({
   params,
@@ -56,7 +59,44 @@ export default async function SectorsAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Manage sectors</h1>
+      <PageHeader
+        title="Manage sectors"
+        description={
+          showSectorList
+            ? "Set target and benchmark weights, and add, rename or reorder sectors."
+            : "Set the fund's target and benchmark weights."
+        }
+        actions={
+          <ViewLink href={`/${ctx.fund.slug}/sectors`}>View sectors</ViewLink>
+        }
+      />
+
+      {canSetTargets && (
+        <section id="targets" className="scroll-mt-20 lg:scroll-mt-6">
+          <Card>
+            <CardHeader title="Target and benchmark weights" />
+            <div className="space-y-4 p-4 sm:p-6">
+              <p className="text-sm text-muted">
+                The target is the share of the fund each sector should hold.
+                The benchmark is that sector&apos;s share of the index the
+                fund is measured against. Members see both on{" "}
+                <Link
+                  href={`/${ctx.fund.slug}/sectors`}
+                  className="font-medium text-accent-text hover:underline"
+                >
+                  Sectors
+                </Link>
+                . Saving starts a new set from the date you pick.
+              </p>
+              <SectorTargetsForm
+                fund={ctx.fund.slug}
+                sectors={sectors}
+                latestTargets={latestTargets}
+              />
+            </div>
+          </Card>
+        </section>
+      )}
 
       {showSectorList && (
         <Card>
@@ -66,19 +106,6 @@ export default async function SectorsAdminPage({
               fund={ctx.fund.slug}
               sectors={sectors}
               canEditSectors={isOfficer(ctx)}
-            />
-          </div>
-        </Card>
-      )}
-
-      {canSetTargets && (
-        <Card>
-          <CardHeader title="Target and benchmark weights" />
-          <div className="p-4 sm:p-6">
-            <SectorTargetsForm
-              fund={ctx.fund.slug}
-              sectors={sectors}
-              latestTargets={latestTargets}
             />
           </div>
         </Card>

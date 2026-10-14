@@ -6,6 +6,10 @@
 // officers/advisor (canViewIndividual) also get the live split and the voter
 // roll via TallyCard. After close everyone sees the yes/no counts, the
 // percentage, and the pass/fail badge — names stay officer-only.
+//
+// The card carries id="vote": every "Vote" link in the app points at
+// /[fund]/pitches/<id>#vote, which matters on a phone, where this card sits
+// below the chart, the thesis and the deck.
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -96,15 +100,15 @@ export function VotePanel({
         router.refresh();
       }
     } catch {
-      setError("Network error — your vote was not saved. Try again.");
+      setError("Network error: your vote was not saved. Try again.");
     }
     setBusy(false);
   }
 
   return (
-    <div className="glass-card p-4 sm:p-5">
+    <div id="vote" className="glass-card scroll-mt-20 p-4 sm:p-5 lg:scroll-mt-6">
       <div className="mb-3 flex items-center gap-2">
-        <Vote className="h-4 w-4 text-accent" />
+        <Vote className="h-4 w-4 text-accent-text" />
         <h2 className="text-base font-semibold">Vote</h2>
       </div>
 
@@ -113,7 +117,7 @@ export function VotePanel({
         <p className="text-sm text-muted">
           {status === "withdrawn"
             ? "This pitch was withdrawn before a vote."
-            : "Voting hasn't opened yet. An officer opens it once the pitch has been presented in class — you'll get an email when it does."}
+            : "Voting hasn't opened yet. An officer opens it once the pitch has been presented in class, and voters get an email when it does."}
         </p>
       )}
 
@@ -183,7 +187,7 @@ export function VotePanel({
                   >
                     {myVote.choice}
                   </span>
-                  {justSaved ? " — updated." : " — you can change it until close."}
+                  {justSaved ? ". Updated." : ". You can change it until close."}
                 </p>
               )}
             </div>
@@ -219,7 +223,7 @@ export function VotePanel({
               )}
               <p className="flex items-center gap-1.5 text-xs text-muted">
                 <Lock className="h-3 w-3 shrink-0" />
-                The yes/no split stays sealed until the vote closes — results
+                The yes/no split stays sealed until the vote closes. Results
                 appear here for everyone once it does.
               </p>
             </div>

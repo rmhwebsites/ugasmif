@@ -1,8 +1,10 @@
 "use client";
 
 // Attendance by member (SPEC 11.2). A client island so the columns sort —
-// "who has missed the most" is the question this table gets asked.
+// "who has missed the most" is the question this table gets asked. For
+// people who manage members, each name opens that member's page.
 
+import Link from "next/link";
 import {
   SortableTable,
   type SortableColumn,
@@ -16,6 +18,8 @@ export interface AttendanceRow {
   total: number;
   /** Meetings held, used when a member has no attendance rows at all. */
   meetingsHeld: number;
+  /** The member's page in Fund admin, for people who manage members. */
+  href?: string;
 }
 
 const columns: SortableColumn<AttendanceRow>[] = [
@@ -25,7 +29,14 @@ const columns: SortableColumn<AttendanceRow>[] = [
     align: "left",
     defaultDir: "asc",
     sortValue: (r) => r.name,
-    render: (r) => r.name,
+    render: (r) =>
+      r.href ? (
+        <Link href={r.href} className="hover:text-accent-text hover:underline">
+          {r.name}
+        </Link>
+      ) : (
+        r.name
+      ),
   },
   {
     key: "attended",

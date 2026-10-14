@@ -3,6 +3,11 @@
 // export; the user-scoped client keeps RLS in force. Columns mirror the
 // on-screen table for the fund's asset class; numbers are raw (no $ or %)
 // so the file drops straight into Excel/Sheets.
+//
+// The table's filters ride along as query parameters (sector=<id> or
+// "unassigned", type=, price=stale, q=), applied by the same function the
+// table uses, so the file holds exactly the rows on screen. A sector page's
+// table always sends its sector.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
@@ -12,11 +17,27 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { valueFund } from "@/lib/valuation";
 import { toCsv } from "@/lib/csv";
 import { easternDateString } from "@/lib/format";
+import {
+  filterHoldings,
+  type HoldingsFilter,
+} from "@/components/holdings/holdingsFilter";
 import type { HoldingValuation } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
 
 const paramsSchema = z.object({ fund: z.enum(["athena", "arch"]) });
+
+/** The table's filters from the query string; anything malformed is ignored. */
+function filterFrom(search: URLSearchParams): HoldingsFilter {
+  const text = (key: string, max: number) =>
+    (search.get(key) ?? "").trim().slice(0, max);
+  return {
+    q: text("q", 100),
+    sector: text("sector", 64),
+    type: text("type", 32),
+    staleOnly: search.get("price") === "stale",
+  };
+}
 
 /** Round to `digits` decimals, empty cell for null/NaN. */
 function num(value: number | null, digits = 2): number | null {
@@ -29,7 +50,7 @@ function gainPct(v: HoldingValuation): number | null {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ fund: string }> }
 ) {
   const parsed = paramsSchema.safeParse(await params);
@@ -51,6 +72,9 @@ export async function GET(
 
   const supabase = await createSupabaseServerClient();
   const valuation = await valueFund(supabase, ctx.fund.id);
+  const filter = filterFrom(request.nextUrl.searchParams);
+  const holdings = filterHoldings(valuation.holdings, filter);
+  const filtered = holdings.length !== valuation.holdings.length;
 
   let headers: string[];
   let rows: (string | number | null)[][];
@@ -73,7 +97,7 @@ export async function GET(
       "Price Source",
       "Stale",
     ];
-    rows = valuation.holdings.map((v) => [
+    rows = holdings.map((v) => [
       v.holding.symbol,
       v.holding.name,
       v.sectorName,
@@ -92,6 +116,7 @@ export async function GET(
     ]);
   } else {
     headers = [
+      "Symbol",
       "Name",
       "Type",
       "Sector",
@@ -112,7 +137,8 @@ export async function GET(
       "Rating",
       "Stale",
     ];
-    rows = valuation.holdings.map((v) => [
+    rows = holdings.map((v) => [
+      v.holding.symbol,
       v.holding.name,
       v.holding.instrument_type,
       v.sectorName,
@@ -138,7 +164,7 @@ export async function GET(
   }
 
   const csv = toCsv(headers, rows);
-  const filename = `smif-${slug}-holdings-${easternDateString()}.csv`;
+  const filename = `smif-${slug}-holdings${filtered ? "-filtered" : ""}-${easternDateString()}.csv`;
   return new NextResponse(csv, {
     status: 200,
     headers: {

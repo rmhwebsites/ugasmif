@@ -19,6 +19,12 @@
   --accent: var(--smif-red);
   --accent-hover: var(--smif-red-light);
   --accent-soft: rgba(186, 12, 47, 0.14);
+  /* Accent as TEXT (links, active nav, pills) and the text colour ON an
+     accent fill (buttons). UGA red reads at only 2.7:1 on the dark cards and
+     white on Arch gold at 2.5:1, so text gets its own lighter or darker shade
+     that clears 4.5:1, and the fills keep the brand colours. */
+  --accent-text: #f05a72;
+  --on-accent: #ffffff;
   --gain: #22c55e;
   --loss: #ef4444;
   --muted: rgba(242, 239, 234, 0.55);
@@ -44,6 +50,7 @@
   --card-border: rgba(28, 27, 26, 0.12);
   --sidebar: #ffffff;
   --accent-soft: rgba(186, 12, 47, 0.09);
+  --accent-text: var(--smif-red);
   --gain: #15803d;
   --loss: #b91c1c;
   --muted: rgba(28, 27, 26, 0.58);
@@ -64,18 +71,27 @@
   --accent: var(--smif-red);
   --accent-hover: var(--smif-red-light);
   --accent-soft: rgba(186, 12, 47, 0.14);
+  --accent-text: #f05a72;
+  --on-accent: #ffffff;
 }
 
 [data-fund="arch"] {
   --accent: var(--smif-gold);
   --accent-hover: var(--smif-gold-light);
   --accent-soft: rgba(206, 156, 92, 0.14);
+  --accent-text: var(--smif-gold);
+  --on-accent: #1c1b1a;
+}
+
+:root[data-theme="light"] [data-fund="athena"] {
+  --accent-text: var(--smif-red);
 }
 
 :root[data-theme="light"] [data-fund="arch"] {
   --accent: var(--smif-gold-dark);
   --accent-hover: #9a7434;
   --accent-soft: rgba(181, 136, 68, 0.12);
+  --accent-text: #8a6326;
 }
 
 @theme inline {
@@ -91,6 +107,8 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-on-accent: var(--on-accent);
   --color-gain: var(--gain);
   --color-loss: var(--loss);
   --color-muted: var(--muted);
@@ -213,9 +231,10 @@ body,
   }
 }
 
-/* The floating theme selector serves pages with no sidebar (login, onboarding,
-   app admin). Fund pages carry their own in the sidebar footer, so the
-   floating copy steps aside wherever the fund chrome is on the page. */
-body:has([data-fund]) .theme-floating {
+/* The floating theme selector serves pages with no chrome of their own
+   (login, onboarding). Fund pages carry it in the sidebar footer and App
+   admin in its header, so the floating copy steps aside on both. */
+body:has([data-fund]) .theme-floating,
+body:has([data-app-admin]) .theme-floating {
   display: none;
 }

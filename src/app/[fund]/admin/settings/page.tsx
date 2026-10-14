@@ -1,14 +1,17 @@
 // /[fund]/admin/settings — vote rules, benchmark, domains, meeting day
 // (SPEC 11.3). Officers and app admins; the API enforces the same rule.
+// "History" opens the audit log filtered to this fund's settings changes.
 
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { History } from "lucide-react";
 import { getFundContext } from "@/lib/fund";
 import { can, hasFundAdminAccess } from "@/lib/permissions";
 import { SettingsForm } from "@/components/admin/SettingsForm";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { LinkButton, PageHeader } from "@/components/ui/PageHeader";
+import { adminTitle } from "../admin-metadata";
 
-export const metadata: Metadata = { title: "Fund settings" };
+export const generateMetadata = adminTitle("settings", "Fund settings");
 
 export default async function SettingsPage({
   params,
@@ -23,7 +26,21 @@ export default async function SettingsPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Fund settings</h1>
+      <PageHeader
+        title="Fund settings"
+        description={`Vote rules, meeting day, benchmark, allowed email domains and alumni access for ${ctx.fund.name}.`}
+        actions={
+          can(ctx, "view_audit_log") && (
+            <LinkButton
+              href={`/${ctx.fund.slug}/admin/audit?entity=funds`}
+              variant="secondary"
+            >
+              <History className="h-4 w-4" aria-hidden="true" />
+              History
+            </LinkButton>
+          )
+        }
+      />
       <Card>
         <CardHeader title={ctx.fund.name} />
         <div className="p-4 sm:p-6">

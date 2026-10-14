@@ -1,7 +1,8 @@
-// /[fund]/admin/year — academic year rollover (SPEC 17.2). Acts on both
-// funds; roster managers only.
+// /[fund]/admin/year — academic year rollover (SPEC 17.2). The year is
+// club-wide: rolling over here ends it for both funds, so the page says so
+// up front. Roster managers only; the next step (importing the new roster)
+// is a link away.
 
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { can, hasFundAdminAccess } from "@/lib/permissions";
@@ -9,10 +10,15 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { YearRollover } from "@/components/admin/YearRollover";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { PageHeader, ViewLink } from "@/components/ui/PageHeader";
 import { formatDate } from "@/lib/format";
 import type { AcademicYear } from "@/types/domain";
+import { adminTitle } from "../admin-metadata";
 
-export const metadata: Metadata = { title: "Academic year" };
+// Titled only for the people who can roll the year over. Other officers
+// still get the page, with a notice in place of the controls, under the
+// fund's plain title.
+export const generateMetadata = adminTitle("year", "Academic year");
 
 function nextYearLabel(current: string): string | null {
   const m = current.match(/^(\d{4})-(\d{2})$/);
@@ -33,11 +39,16 @@ export default async function YearAdminPage({
 
   if (!can(ctx, "manage_roster")) {
     return (
-      <div className="glass-card p-8 text-center">
-        <p className="font-medium">Academic year rollover</p>
-        <p className="mt-1 text-sm text-muted">
-          The president, vice president, alumni relations director, and app
-          admins run the yearly rollover.
+      <div className="space-y-4 sm:space-y-6">
+        <PageHeader
+          title="Academic year"
+          actions={
+            <ViewLink href={`/${ctx.fund.slug}/team`}>View team</ViewLink>
+          }
+        />
+        <p className="glass-card p-6 text-sm text-muted">
+          The president, vice president, director of alumni relations, and
+          app admins start each new year for both funds.
         </p>
       </div>
     );
@@ -53,7 +64,10 @@ export default async function YearAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Academic year</h1>
+      <PageHeader
+        title="Academic year"
+        description="Shared by both funds. Starting a new year here starts it for Athena and Arch at once."
+      />
 
       <Card>
         <CardHeader title="Years" />
@@ -86,6 +100,7 @@ export default async function YearAdminPage({
               fund={ctx.fund.slug}
               currentLabel={ctx.currentYear.label}
               nextLabel={next}
+              rosterImportHref={`/${ctx.fund.slug}/admin/members#roster-import`}
             />
           </div>
         </Card>

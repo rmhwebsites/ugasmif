@@ -1,17 +1,23 @@
 // /[fund]/updates — officer posts with unread highlighting (SPEC 11.2).
+// Officers get "Post an update" and, beside it, "Manage updates", the page
+// where existing posts are pinned and deleted.
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { can } from "@/lib/permissions";
+import { canOpenAdminSection } from "@/lib/permissions";
 import {
   UpdatesList,
   type UpdateListItem,
 } from "@/components/updates/UpdatesList";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { FundUpdate, Profile, UpdateRead } from "@/types/domain";
-import { LinkButton, PageHeader } from "@/components/ui/PageHeader";
+import {
+  LinkButton,
+  ManageLink,
+  PageHeader,
+} from "@/components/ui/PageHeader";
 import { Plus } from "lucide-react";
 
 export const metadata: Metadata = { title: "Updates" };
@@ -52,7 +58,8 @@ export default async function UpdatesPage({
     read: readIds.has(u.id),
   }));
 
-  const canPost = can(ctx, "post_updates");
+  const canPost = canOpenAdminSection(ctx, "updates");
+  const manageHref = `/${ctx.fund.slug}/admin/updates`;
 
   return (
     <div className="space-y-6">
@@ -61,9 +68,12 @@ export default async function UpdatesPage({
         description="Announcements from the fund's officers."
         actions={
           canPost ? (
-            <LinkButton href={`/${ctx.fund.slug}/admin/updates`}>
-              <Plus className="h-4 w-4" /> Post an update
-            </LinkButton>
+            <>
+              <ManageLink href={`${manageHref}#posted`}>Manage updates</ManageLink>
+              <LinkButton href={manageHref}>
+                <Plus className="h-4 w-4" /> Post an update
+              </LinkButton>
+            </>
           ) : undefined
         }
       />
@@ -74,7 +84,7 @@ export default async function UpdatesPage({
           hint={
             canPost
               ? "Post the first one with the button above."
-              : "Officers post announcements here — check back after the next class."
+              : "Officers post announcements here. Check back after the next class."
           }
         />
       ) : (

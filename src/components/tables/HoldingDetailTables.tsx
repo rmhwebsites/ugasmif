@@ -3,10 +3,13 @@
 // The two data tables on /[fund]/holdings/[id] (SPEC 11.2): the position's
 // trade history and, for a manually marked bond, its mark history. Client
 // islands so the columns sort; the page loads and joins on the server.
+// A trade that came from a pitch links to it, so a position can be traced
+// back to the case that was made for it.
 //
 // The cash-flow schedule stays on the page unsorted: a coupon schedule read
 // out of date order is not a schedule.
 
+import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import {
   SortableTable,
@@ -30,8 +33,20 @@ function spreadLabel(bp: number | null): string {
 
 // ── Trade history ───────────────────────────────────────────────────────────
 
-function tradeColumns(isBond: boolean): SortableColumn<Trade>[] {
-  return [
+/** The pitch behind a trade, keyed by the trade's ticket id. */
+export interface TradePitch {
+  id: string;
+  title: string;
+}
+
+function tradeColumns(
+  isBond: boolean,
+  fund: string,
+  pitchByTicket: Record<string, TradePitch>
+): SortableColumn<Trade>[] {
+  const pitchOf = (t: Trade) =>
+    t.ticket_id ? pitchByTicket[t.ticket_id] ?? null : null;
+  const columns: SortableColumn<Trade>[] = [
     {
       key: "date",
       label: "Date",
@@ -97,19 +112,50 @@ function tradeColumns(isBond: boolean): SortableColumn<Trade>[] {
       ),
     },
   ];
+  // Only when some trade has a pitch: a column of dashes says nothing.
+  if (Object.keys(pitchByTicket).length > 0) {
+    columns.push({
+      key: "pitch",
+      label: "Pitch",
+      align: "left",
+      defaultDir: "asc",
+      sortValue: (t) => pitchOf(t)?.title ?? null,
+      render: (t) => {
+        const pitch = pitchOf(t);
+        if (!pitch) return <span className="text-muted">—</span>;
+        return (
+          <Link
+            href={`/${fund}/pitches/${pitch.id}`}
+            className="block max-w-[220px] truncate font-medium text-accent-text hover:underline"
+          >
+            {pitch.title}
+          </Link>
+        );
+      },
+    });
+  }
+  return columns;
 }
 
 export function HoldingTradesTable({
   trades,
   isBond,
+  fund,
+  pitchByTicket = {},
 }: {
   trades: Trade[];
   isBond: boolean;
+  fund: string;
+  /** ticket id → the pitch that ticket came from. */
+  pitchByTicket?: Record<string, TradePitch>;
 }) {
+  const hasPitch = trades.some(
+    (t) => t.ticket_id !== null && pitchByTicket[t.ticket_id] !== undefined
+  );
   return (
     <SortableTable
       rows={trades}
-      columns={tradeColumns(isBond)}
+      columns={tradeColumns(isBond, fund, hasPitch ? pitchByTicket : {})}
       rowKey={(t) => t.id}
       initialSort={{ key: "date", dir: "desc" }}
       minWidth={560}

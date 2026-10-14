@@ -195,6 +195,76 @@ export function hasFundAdminAccess(ctx: FundContext): boolean {
   return isOfficer(ctx) || ctx.isFacultyAdvisor || ctx.isAppAdmin;
 }
 
+/**
+ * Fund admin's sections, named by their URL segment under /[fund]/admin
+ * ("" is the checklist). Order is the tab order.
+ */
+export const ADMIN_SECTIONS = [
+  "",
+  "tickets",
+  "holdings",
+  "pitches",
+  "sectors",
+  "attendance",
+  "updates",
+  "members",
+  "year",
+  "settings",
+  "audit",
+] as const;
+
+export type AdminSection = (typeof ADMIN_SECTIONS)[number];
+
+/**
+ * May this person use this Fund admin section? Each test is the gate the
+ * section's own page applies, so the tabs and the checklist only offer
+ * doors that open. Pitches admits the advisor, who reads the live tally and
+ * the "Has not voted" list there (view_individual_votes) without the
+ * scheduling controls.
+ */
+export function canOpenAdminSection(
+  ctx: FundContext,
+  section: AdminSection
+): boolean {
+  switch (section) {
+    case "":
+      return hasFundAdminAccess(ctx);
+    case "tickets":
+      return can(ctx, "execute_ticket");
+    case "holdings":
+      return can(ctx, "manage_holdings");
+    case "pitches":
+      return (
+        hasFundAdminAccess(ctx) &&
+        (can(ctx, "schedule_pitch") || can(ctx, "view_individual_votes"))
+      );
+    case "sectors":
+      return (
+        isOfficer(ctx) ||
+        ctx.isFacultyAdvisor ||
+        can(ctx, "set_sector_targets")
+      );
+    case "attendance":
+      return hasFundAdminAccess(ctx) && can(ctx, "record_attendance");
+    case "updates":
+      return hasFundAdminAccess(ctx) && can(ctx, "post_updates");
+    case "members":
+    case "year":
+      return hasFundAdminAccess(ctx) && can(ctx, "manage_roster");
+    case "settings":
+      return hasFundAdminAccess(ctx) && can(ctx, "manage_fund_settings");
+    case "audit":
+      return can(ctx, "view_audit_log");
+    default:
+      return false;
+  }
+}
+
+/** The Fund admin sections this person may use, in tab order. */
+export function adminSectionsFor(ctx: FundContext): AdminSection[] {
+  return ADMIN_SECTIONS.filter((s) => canOpenAdminSection(ctx, s));
+}
+
 /** Human label for a member's role in a fund, e.g. "Portfolio Manager". */
 export function roleLabel(
   role: MembershipRole | null,

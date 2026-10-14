@@ -1,9 +1,11 @@
 // /[fund]/trades (SPEC 11.2): pending tickets at the top (read-only cards for
-// non-PM members, with a "Record execution" link for those who can execute),
-// then the immutable trade ledger. Filters — symbol text, action, sector,
-// date range — are searchParams-driven and applied on the server. Security
-// and executor names are joined in via a holdings map and a profiles map
-// (two extra queries); reversal rows are labeled "reverses trade …".
+// non-PM members, with a "Record execution" link for those who can execute
+// that opens that ticket's form on Manage tickets), then the immutable trade
+// ledger. Filters — symbol text, action, sector, date range — are
+// searchParams-driven and applied on the server. Security and executor names
+// are joined in via a holdings map and a profiles map, and a trade filled
+// from a pitch's ticket carries that pitch's title; reversal rows are labeled
+// "reverses trade …".
 
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -18,6 +20,13 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { Holding, Sector, Trade, TradeTicket } from "@/types/domain";
 import { ManageLink, PageHeader } from "@/components/ui/PageHeader";
+
+/** A filled ticket, read for the pitch behind a ledger row. */
+type LedgerTicket = {
+  id: string;
+  pitch_id: string | null;
+  pitches: { id: string; title: string } | null;
+};
 
 export const metadata: Metadata = { title: "Trades" };
 
@@ -87,7 +96,7 @@ export default async function TradesPage({
       .order("sort_order"),
   ]);
 
-  const tickets = (ticketsRes.data as TradeTicket[]) ?? [];
+  const allTickets = (ticketsRes.data as TradeTicket[]) ?? [];
   const allTrades = (tradesRes.data as Trade[]) ?? [];
   const holdings = (holdingsRes.data as HoldingLite[]) ?? [];
   const sectors = (sectorsRes.data as SectorLite[]) ?? [];
@@ -99,23 +108,37 @@ export default async function TradesPage({
   const profileIds = [
     ...new Set([
       ...allTrades.map((t) => t.executed_by),
-      ...tickets.map((t) => t.created_by),
+      ...allTickets.map((t) => t.created_by),
     ]),
   ];
   const pitchIds = [
     ...new Set(
-      tickets
+      allTickets
         .map((t) => t.pitch_id)
         .filter((id): id is string => id !== null)
     ),
   ];
-  const [profilesRes, pitchesRes] = await Promise.all([
+  // Trades filled from a ticket: the ticket names the pitch, if any.
+  const ledgerTicketIds = [
+    ...new Set(
+      allTrades
+        .map((t) => t.ticket_id)
+        .filter((id): id is string => id !== null)
+    ),
+  ];
+  const [profilesRes, pitchesRes, ledgerTicketsRes] = await Promise.all([
     profileIds.length > 0
       ? supabase.from("profiles").select("id, full_name").in("id", profileIds)
       : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
     pitchIds.length > 0
       ? supabase.from("pitches").select("id, title").in("id", pitchIds)
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+    ledgerTicketIds.length > 0
+      ? supabase
+          .from("trade_tickets")
+          .select("id, pitch_id, pitches(id, title)")
+          .in("id", ledgerTicketIds)
+      : Promise.resolve({ data: [] as LedgerTicket[] }),
   ]);
   const nameById = new Map(
     ((profilesRes.data as { id: string; full_name: string }[]) ?? []).map(
@@ -127,6 +150,11 @@ export default async function TradesPage({
       p.id,
       p.title,
     ])
+  );
+  const pitchByTicketId = new Map(
+    ((ledgerTicketsRes.data as unknown as LedgerTicket[]) ?? []).flatMap((t) =>
+      t.pitches ? [[t.id, t.pitches] as const] : []
+    )
   );
 
   // Symbol text and sector filters need the holding join, so they apply here.
@@ -143,10 +171,27 @@ export default async function TradesPage({
     if (sectorFilterId && h?.sector_id !== sectorFilterId) return false;
     return true;
   });
+  // The symbol, action and sector filters narrow the pending tickets too, so
+  // a filtered view doesn't open on tickets for other securities. A pending
+  // ticket has no trade date yet, so the date range leaves them alone.
+  const tickets = allTickets.filter((t) => {
+    if (needle) {
+      const hay = `${t.symbol ?? ""} ${t.name ?? ""}`.toLowerCase();
+      if (!hay.includes(needle)) return false;
+    }
+    if (actionQ && t.action !== actionQ) return false;
+    if (sectorFilterId) {
+      const sectorId =
+        t.sector_id ??
+        (t.holding_id ? holdingById.get(t.holding_id)?.sector_id : null);
+      if (sectorId !== sectorFilterId) return false;
+    }
+    return true;
+  });
 
   const mayExecute = canExecute(ctx);
   const selectClass =
-    "cursor-pointer rounded-lg border border-input-border bg-input-bg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-highlight focus:outline-none";
+    "cursor-pointer rounded-lg border border-input-border bg-input-bg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-highlight focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-text";
   const inputClass =
     "rounded-lg border border-input-border bg-input-bg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-accent";
 
@@ -154,7 +199,7 @@ export default async function TradesPage({
     <div className="space-y-6">
       <PageHeader
         title="Trades"
-        description={`Tickets waiting to be placed, then the ledger of every trade. ${
+        description={`Pending tickets, then the ledger of every trade. ${
           trades.length === LEDGER_LIMIT
             ? `Showing the most recent ${LEDGER_LIMIT}.`
             : `${trades.length} ${trades.length === 1 ? "trade" : "trades"} so far.`
@@ -172,7 +217,7 @@ export default async function TradesPage({
       {tickets.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">
-            Waiting to be placed
+            Pending tickets
             <span className="ml-2 text-sm font-normal text-muted tabular-nums">
               {tickets.length}
             </span>
@@ -181,11 +226,17 @@ export default async function TradesPage({
             {tickets.map((ticket) => (
               <TicketCard
                 key={ticket.id}
+                id={`ticket-${ticket.id}`}
                 ticket={ticket}
                 fund={ctx.fund.slug}
                 sectorName={
                   ticket.sector_id
                     ? sectorById.get(ticket.sector_id)?.name ?? null
+                    : null
+                }
+                sectorSlug={
+                  ticket.sector_id
+                    ? sectorById.get(ticket.sector_id)?.slug ?? null
                     : null
                 }
                 pitchTitle={
@@ -197,15 +248,15 @@ export default async function TradesPage({
                 footer={
                   mayExecute ? (
                     <Link
-                      href={`/${ctx.fund.slug}/admin/tickets`}
-                      className="inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline"
+                      href={`/${ctx.fund.slug}/admin/tickets#ticket-${ticket.id}`}
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-accent-text hover:underline"
                     >
                       Record execution
                       <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                     </Link>
                   ) : (
                     <p className="text-xs text-muted">
-                      Awaiting execution by the portfolio manager.
+                      Waiting to be executed by the portfolio manager.
                     </p>
                   )
                 }
@@ -219,7 +270,18 @@ export default async function TradesPage({
       {trades.length === 0 && !filtering ? (
         <EmptyState
           title="No trades yet"
-          hint="The ledger fills in when the portfolio manager executes a ticket — pass a pitch to create one, or the PM can create a ticket directly from Admin → Tickets."
+          hint={
+            mayExecute
+              ? "The ledger fills in as tickets are executed. A pitch that passes its vote creates a ticket, or you can create one directly."
+              : "The ledger fills in when the portfolio manager executes a ticket. A pitch that passes its vote creates a ticket."
+          }
+          action={
+            mayExecute ? (
+              <ManageLink href={`/${ctx.fund.slug}/admin/tickets`}>
+                Manage tickets
+              </ManageLink>
+            ) : undefined
+          }
         />
       ) : (
       <div className="glass-card overflow-hidden">
@@ -291,7 +353,7 @@ export default async function TradesPage({
             <p className="text-sm text-muted">No trades match these filters.</p>
             <Link
               href={`/${ctx.fund.slug}/trades`}
-              className="mt-2 inline-block text-sm font-medium text-accent hover:underline"
+              className="mt-2 inline-block text-sm font-medium text-accent-text hover:underline"
             >
               Clear filters
             </Link>
@@ -312,6 +374,9 @@ export default async function TradesPage({
                     }
                   : null,
                 executedByName: nameById.get(t.executed_by) ?? null,
+                pitch: t.ticket_id
+                  ? pitchByTicketId.get(t.ticket_id) ?? null
+                  : null,
               };
             })}
           />

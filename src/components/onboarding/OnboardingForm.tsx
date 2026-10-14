@@ -34,6 +34,7 @@ export function OnboardingForm({
   initialAvatarUrl,
   userId,
   pickers,
+  next = "/",
 }: {
   email: string;
   initialFirstName: string;
@@ -42,6 +43,8 @@ export function OnboardingForm({
   initialAvatarUrl: string | null;
   userId: string;
   pickers: SectorPicker[];
+  /** Where to go once saved: the page the member was headed to, already checked. */
+  next?: string;
 }) {
   const router = useRouter();
   const [firstName, setFirstName] = useState(initialFirstName);
@@ -85,7 +88,7 @@ export function OnboardingForm({
       setError(data?.error ?? "Could not save your details.");
       return;
     }
-    router.push("/");
+    router.push(next);
     router.refresh();
   }
 

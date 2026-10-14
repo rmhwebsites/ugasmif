@@ -1,18 +1,40 @@
 "use client";
 
 // Full holdings table (SPEC 11.2): sortable columns, sticky header, sticky
-// first column on horizontal scroll (GBH HoldingsTable pattern), sector +
-// instrument-type filters, CSV export. Column set switches on the fund's
-// asset class — equity columns for Athena, bond columns for Arch. Row click
-// opens /[fund]/holdings/[id]. `compact` renders the same table without the
-// filter bar or card chrome for the dashboard's top-positions slice.
+// first column on horizontal scroll (GBH HoldingsTable pattern), a text
+// search plus sector, instrument-type and stale-price filters, CSV export of
+// exactly the rows on screen. Column set switches on the fund's asset class:
+// equity columns for Athena, bond columns for Arch. Row click opens
+// /[fund]/holdings/[id]. `compact` renders the same table without the filter
+// bar or card chrome for the dashboard's top-positions slice.
+//
+// The search and the stale filter live in the URL (?q=, ?price=stale), so a
+// filtered table can be linked to. Typing rewrites the address in place
+// (history.replaceState), which Next's router picks up without asking the
+// server to value the fund again.
+//
+// On a phone the pinned first column says which security a row is (ticker
+// and name, or for a bond its coupon and maturity), and the value and day
+// change sit right beside it; the rest is a swipe away.
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Download } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Download,
+  Search,
+} from "lucide-react";
 import { PriceSourceBadge } from "@/components/holdings/PriceSourceBadge";
 import { SecurityLogo } from "@/components/holdings/SecurityLogo";
+import {
+  UNASSIGNED_SECTOR,
+  filterHoldings,
+  holdingsExportHref,
+} from "@/components/holdings/holdingsFilter";
+import { SectorLink } from "@/components/ui/SectorLink";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import {
@@ -47,7 +69,8 @@ const TYPE_ORDER = [
   "money_market",
 ];
 
-const UNASSIGNED = "__unassigned__";
+/** How long typing pauses before the search is written to the address. */
+const URL_WRITE_DELAY_MS = 300;
 
 interface Column {
   key: string;
@@ -60,7 +83,14 @@ interface Column {
   /** Extra classes on both th and td (responsive hiding). */
   className?: string;
   first?: boolean;
+  /**
+   * The sort this column shares with another. Phones get their own copy of
+   * a column (to put it beside the pinned one); both copies sort as one.
+   */
+  sortKey?: string;
 }
+
+const sortKeyOf = (col: Column) => col.sortKey ?? col.key;
 
 function gainPct(v: HoldingValuation): number | null {
   return v.costBasis > 0 ? (v.unrealizedGain / v.costBasis) * 100 : null;
@@ -117,7 +147,68 @@ function WeightCell({ weightPct }: { weightPct: number }) {
   );
 }
 
-function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
+/** Phones: market value over weight, the pair people check first. */
+function ValueStack({ v }: { v: HoldingValuation }) {
+  return (
+    <div className="flex flex-col items-end">
+      <span className="text-[11px] font-medium">
+        {formatCurrencyWhole(v.marketValue)}
+      </span>
+      <span className="text-[10px] text-muted">{formatPercent(v.weightPct)}</span>
+    </div>
+  );
+}
+
+function SectorCell({
+  v,
+  fund,
+  sectorSlugs,
+  maxWidth,
+}: {
+  v: HoldingValuation;
+  fund: FundSlug;
+  sectorSlugs?: Record<string, string>;
+  maxWidth: string;
+}) {
+  if (!v.sectorName) return <span className="text-muted">—</span>;
+  const slug = v.holding.sector_id ? sectorSlugs?.[v.holding.sector_id] : null;
+  return (
+    <span className={`block truncate text-muted ${maxWidth}`}>
+      <SectorLink fund={fund} slug={slug} name={v.sectorName} />
+    </span>
+  );
+}
+
+/** "0.75% · matures Feb 15, 2042 · Treasury": a bond told apart on a phone. */
+function bondMeta(v: HoldingValuation): string {
+  const h = v.holding;
+  const coupon = h.coupon_rate !== null ? Number(h.coupon_rate) : null;
+  return [
+    coupon !== null && coupon > 0 ? `${coupon}%` : null,
+    h.maturity_date ? `matures ${formatDate(h.maturity_date)}` : null,
+    TYPE_LABELS[h.instrument_type] ?? h.instrument_type,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function buildColumns(
+  assetClass: AssetClass,
+  fund: FundSlug,
+  sectorSlugs?: Record<string, string>
+): Column[] {
+  // Phone-only copies, placed right after the pinned column. Their desktop
+  // twins hide below sm.
+  const valuePhone: Column = {
+    key: "valuePhone",
+    label: "Value",
+    defaultDir: "desc",
+    className: "sm:hidden",
+    sortKey: "weight",
+    sortValue: (v) => v.weightPct,
+    render: (v) => <ValueStack v={v} />,
+  };
+
   if (assetClass === "equity") {
     return [
       {
@@ -131,7 +222,6 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
           <Link
             href={`/${fund}/holdings/${v.holding.id}`}
             className="flex items-center gap-2"
-            onClick={(e) => e.stopPropagation()}
           >
             <SecurityLogo
               symbol={v.holding.symbol}
@@ -142,12 +232,22 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
               <span className="block text-xs font-semibold text-foreground sm:text-sm">
                 {v.holding.symbol ?? "—"}
               </span>
-              <span className="block max-w-[110px] truncate text-[10px] text-muted md:hidden">
+              <span className="block max-w-[96px] truncate text-[10px] text-muted sm:max-w-[110px] md:hidden">
                 {v.holding.name}
               </span>
             </span>
           </Link>
         ),
+      },
+      valuePhone,
+      {
+        key: "dayPhone",
+        label: "Day",
+        defaultDir: "desc",
+        className: "sm:hidden",
+        sortKey: "day",
+        sortValue: (v) => v.dayChangePct,
+        render: (v) => <SignedPair amount={v.dayChange} pct={v.dayChangePct} />,
       },
       {
         key: "name",
@@ -170,9 +270,12 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
         className: "hidden lg:table-cell",
         sortValue: (v) => v.sectorName,
         render: (v) => (
-          <span className="block max-w-[140px] truncate text-muted">
-            {v.sectorName ?? "—"}
-          </span>
+          <SectorCell
+            v={v}
+            fund={fund}
+            sectorSlugs={sectorSlugs}
+            maxWidth="max-w-[140px]"
+          />
         ),
       },
       {
@@ -200,6 +303,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
                 source={v.priceSource}
                 markedAt={v.markedAt}
                 stale={v.stale}
+                price={v.price}
               />
             )}
           </div>
@@ -209,6 +313,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
         key: "day",
         label: "Day change",
         defaultDir: "desc",
+        className: "hidden sm:table-cell",
         sortValue: (v) => v.dayChangePct,
         render: (v) => <SignedPair amount={v.dayChange} pct={v.dayChangePct} />,
       },
@@ -216,6 +321,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
         key: "marketValue",
         label: "Market value",
         defaultDir: "desc",
+        className: "hidden sm:table-cell",
         sortValue: (v) => v.marketValue,
         render: (v) => (
           <span className="font-medium">{formatCurrency(v.marketValue)}</span>
@@ -225,6 +331,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
         key: "weight",
         label: "Weight",
         defaultDir: "desc",
+        className: "hidden sm:table-cell",
         sortValue: (v) => v.weightPct,
         render: (v) => <WeightCell weightPct={v.weightPct} />,
       },
@@ -275,7 +382,8 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
     ];
   }
 
-  // Fixed income columns (Arch)
+  // Fixed income columns (Arch). The name cell carries the ticker when there
+  // is one (ETFs), the same label the dashboard and the holding page use.
   return [
     {
       key: "name",
@@ -283,22 +391,29 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
       align: "left",
       defaultDir: "asc",
       first: true,
-      sortValue: (v) => v.holding.name,
+      sortValue: (v) => v.holding.symbol ?? v.holding.name,
       render: (v) => (
         <Link
           href={`/${fund}/holdings/${v.holding.id}`}
-          className="block"
-          onClick={(e) => e.stopPropagation()}
+          className="block w-[150px] whitespace-normal sm:w-[240px]"
         >
-          <p className="max-w-[150px] truncate text-xs font-semibold text-foreground sm:max-w-[220px] sm:text-sm">
-            {v.holding.name}
-          </p>
-          <p className="text-[10px] text-muted md:hidden">
-            {TYPE_LABELS[v.holding.instrument_type] ?? v.holding.instrument_type}
-          </p>
+          <span className="line-clamp-2 text-xs text-foreground sm:line-clamp-1 sm:text-sm">
+            {v.holding.symbol ? (
+              <>
+                <span className="font-semibold">{v.holding.symbol}</span>
+                <span className="text-muted"> · {v.holding.name}</span>
+              </>
+            ) : (
+              <span className="font-semibold">{v.holding.name}</span>
+            )}
+          </span>
+          <span className="mt-0.5 block text-[10px] leading-snug text-muted md:hidden">
+            {bondMeta(v)}
+          </span>
         </Link>
       ),
     },
+    valuePhone,
     {
       key: "type",
       label: "Type",
@@ -321,9 +436,12 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
       className: "hidden xl:table-cell",
       sortValue: (v) => v.sectorName,
       render: (v) => (
-        <span className="block max-w-[120px] truncate text-muted">
-          {v.sectorName ?? "—"}
-        </span>
+        <SectorCell
+          v={v}
+          fund={fund}
+          sectorSlugs={sectorSlugs}
+          maxWidth="max-w-[120px]"
+        />
       ),
     },
     {
@@ -374,6 +492,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
             source={v.priceSource}
             markedAt={v.markedAt}
             stale={v.stale}
+            price={v.price}
           />
         </div>
       ),
@@ -392,6 +511,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
       key: "marketValue",
       label: "Market value",
       defaultDir: "desc",
+      className: "hidden sm:table-cell",
       sortValue: (v) => v.marketValue,
       render: (v) => (
         <span className="font-medium">{formatCurrency(v.marketValue)}</span>
@@ -401,6 +521,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
       key: "weight",
       label: "Weight",
       defaultDir: "desc",
+      className: "hidden sm:table-cell",
       sortValue: (v) => v.weightPct,
       render: (v) => <WeightCell weightPct={v.weightPct} />,
     },
@@ -437,71 +558,145 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
   ];
 }
 
+/**
+ * Rewrite some of the address's query parameters in place. Next's router
+ * hears replaceState, so useSearchParams follows without a server round
+ * trip. Null removes a parameter.
+ */
+function writeUrlParams(pathname: string, updates: Record<string, string | null>) {
+  const params = new URLSearchParams(window.location.search);
+  for (const [key, value] of Object.entries(updates)) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  const qs = params.toString();
+  window.history.replaceState(
+    null,
+    "",
+    `${pathname}${qs ? `?${qs}` : ""}${window.location.hash}`
+  );
+}
+
 export function HoldingsTable({
   holdings,
   fund,
   assetClass,
   compact = false,
+  sectorSlugs,
+  scopeSectorId,
 }: {
   holdings: HoldingValuation[];
   fund: FundSlug;
   assetClass: AssetClass;
   /** Dashboard slice: drops the filter bar, the CSV export and the card
    *  chrome, because the caller supplies the card and the "all holdings"
-   *  link. Sorting still works. */
+   *  link. Sorting still works; the URL filters do not apply. */
   compact?: boolean;
+  /** sector_id → sector slug. Makes the Sector column's names links to
+   *  each sector's page. */
+  sectorSlugs?: Record<string, string>;
+  /** Locks the table to one sector (a sector's own page): hides the sector
+   *  filter and exports only that sector. */
+  scopeSectorId?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({
     key: "weight",
     dir: "desc",
   });
-  const [sectorFilter, setSectorFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [sectorFilter, setSectorFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
 
-  const columns = useMemo(() => buildColumns(assetClass, fund), [assetClass, fund]);
+  // ?q= seeds the search box. After that the box leads and the address
+  // follows a moment behind; a change to ?q= that the box did not write (a
+  // link, the sidebar) wins and resets the box.
+  const urlQuery = compact ? "" : (searchParams.get("q") ?? "").trim();
+  const [query, setQuery] = useState(urlQuery);
+  const [seenUrlQuery, setSeenUrlQuery] = useState(urlQuery);
+  const [writtenQuery, setWrittenQuery] = useState(urlQuery);
+  if (urlQuery !== seenUrlQuery) {
+    setSeenUrlQuery(urlQuery);
+    if (urlQuery !== writtenQuery) {
+      setQuery(urlQuery);
+      setWrittenQuery(urlQuery);
+    }
+  }
+  useEffect(() => {
+    const next = query.trim();
+    if (compact || next === writtenQuery) return;
+    const timer = setTimeout(() => {
+      setWrittenQuery(next);
+      writeUrlParams(pathname, { q: next || null });
+    }, URL_WRITE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [compact, query, writtenQuery, pathname]);
+
+  // ?price=stale: read straight from the address; the toggle rewrites it.
+  const staleOnly = !compact && searchParams.get("price") === "stale";
+
+  // A table locked to one sector doesn't repeat that sector on every row.
+  const columns = useMemo(() => {
+    const all = buildColumns(assetClass, fund, sectorSlugs);
+    return scopeSectorId ? all.filter((c) => c.key !== "sector") : all;
+  }, [assetClass, fund, sectorSlugs, scopeSectorId]);
+
+  // A sector page passes its own rows already; the scope also guards
+  // against a caller that passes the whole fund.
+  const scoped = useMemo(
+    () =>
+      scopeSectorId
+        ? holdings.filter((v) => v.holding.sector_id === scopeSectorId)
+        : holdings,
+    [holdings, scopeSectorId]
+  );
 
   const sectorOptions = useMemo(() => {
-    const names = [
-      ...new Set(
-        holdings
-          .map((v) => v.sectorName)
-          .filter((name): name is string => name !== null)
-      ),
-    ].sort((a, b) => a.localeCompare(b));
-    const hasUnassigned = holdings.some((v) => v.sectorName === null);
-    return { names, hasUnassigned };
-  }, [holdings]);
+    const byId = new Map<string, string>();
+    for (const v of scoped) {
+      if (v.holding.sector_id && v.sectorName) {
+        byId.set(v.holding.sector_id, v.sectorName);
+      }
+    }
+    const options = [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const hasUnassigned = scoped.some((v) => v.holding.sector_id === null);
+    return { options, hasUnassigned };
+  }, [scoped]);
 
   const typeOptions = useMemo(() => {
     const present = new Set<string>(
-      holdings.map((v) => v.holding.instrument_type)
+      scoped.map((v) => v.holding.instrument_type)
     );
     return TYPE_ORDER.filter((t) => present.has(t)).concat(
       [...present].filter((t) => !TYPE_ORDER.includes(t))
     );
-  }, [holdings]);
+  }, [scoped]);
 
-  const filtered = useMemo(
-    () =>
-      holdings.filter((v) => {
-        if (sectorFilter !== "all") {
-          if (sectorFilter === UNASSIGNED) {
-            if (v.sectorName !== null) return false;
-          } else if (v.sectorName !== sectorFilter) {
-            return false;
-          }
-        }
-        if (typeFilter !== "all" && v.holding.instrument_type !== typeFilter) {
-          return false;
-        }
-        return true;
-      }),
-    [holdings, sectorFilter, typeFilter]
+  const staleCount = useMemo(
+    () => scoped.filter((v) => v.stale).length,
+    [scoped]
   );
 
+  const filter = useMemo(
+    () =>
+      compact
+        ? {}
+        : {
+            q: query,
+            sector: scopeSectorId ?? sectorFilter,
+            type: typeFilter,
+            staleOnly,
+          },
+    [compact, query, scopeSectorId, sectorFilter, typeFilter, staleOnly]
+  );
+
+  const filtered = useMemo(() => filterHoldings(scoped, filter), [scoped, filter]);
+
   const sorted = useMemo(() => {
-    const col = columns.find((c) => c.key === sort.key);
+    const col = columns.find((c) => sortKeyOf(c) === sort.key);
     if (!col) return filtered;
     const withVal = filtered.map((v) => ({ v, s: col.sortValue(v) }));
     const nonNull = withVal.filter((x) => x.s !== null && x.s !== "");
@@ -518,72 +713,126 @@ export function HoldingsTable({
     return [...nonNull, ...nulls].map((x) => x.v);
   }, [filtered, sort, columns]);
 
-  if (holdings.length === 0) {
+  if (scoped.length === 0) {
     return (
       <EmptyState
         title="No holdings yet"
-        hint={
-          assetClass === "equity"
-            ? "The portfolio manager can add positions under Admin → Holdings, or execute a passed pitch to open one."
-            : "The portfolio manager can add bonds under Admin → Holdings — set the pricing method and enter a first mark for manually priced issues."
-        }
+        hint="Positions appear here once the portfolio manager records a trade."
       />
     );
   }
 
   const toggleSort = (col: Column) => {
+    const key = sortKeyOf(col);
     setSort((prev) =>
-      prev.key === col.key
-        ? { key: col.key, dir: prev.dir === "asc" ? "desc" : "asc" }
-        : { key: col.key, dir: col.defaultDir }
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: col.defaultDir }
     );
   };
 
-  const filtering = sectorFilter !== "all" || typeFilter !== "all";
+  const toggleStale = () =>
+    writeUrlParams(pathname, { price: staleOnly ? null : "stale" });
+
+  const clearFilters = () => {
+    setSectorFilter("");
+    setTypeFilter("");
+    setQuery("");
+    setWrittenQuery("");
+    writeUrlParams(pathname, { q: null, price: null });
+  };
+
+  const filtering =
+    query.trim() !== "" ||
+    (!scopeSectorId && sectorFilter !== "") ||
+    typeFilter !== "" ||
+    staleOnly;
   const selectClass =
-    "cursor-pointer rounded-lg border border-input-border bg-input-bg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-highlight focus:outline-none";
+    "cursor-pointer rounded-lg border border-input-border bg-input-bg px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-highlight focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-text";
 
   return (
     <div className={compact ? "overflow-hidden" : "glass-card overflow-hidden"}>
       {/* Filter bar */}
       {!compact && (
         <div className="flex flex-wrap items-center gap-2 border-b border-card-border px-4 py-3 sm:px-6">
-          <select
-            aria-label="Filter by sector"
-            value={sectorFilter}
-            onChange={(e) => setSectorFilter(e.target.value)}
-            className={selectClass}
-          >
-            <option value="all">All sectors</option>
-            {sectorOptions.names.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-            {sectorOptions.hasUnassigned && (
-              <option value={UNASSIGNED}>Unassigned</option>
-            )}
-          </select>
+          <label className="relative w-full sm:w-52">
+            <span className="sr-only">Search holdings</span>
+            <Search
+              className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={
+                assetClass === "equity"
+                  ? "Symbol or name"
+                  : "Name, symbol or CUSIP"
+              }
+              className="w-full rounded-lg border border-input-border bg-input-bg py-1.5 pr-2.5 pl-8 text-xs text-foreground outline-none transition-colors focus:border-accent"
+            />
+          </label>
+          {!scopeSectorId && (
+            <select
+              aria-label="Filter by sector"
+              value={sectorFilter}
+              onChange={(e) => setSectorFilter(e.target.value)}
+              className={selectClass}
+            >
+              <option value="">All sectors</option>
+              {sectorOptions.options.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+              {sectorOptions.hasUnassigned && (
+                <option value={UNASSIGNED_SECTOR}>Unassigned</option>
+              )}
+            </select>
+          )}
           <select
             aria-label="Filter by instrument type"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             className={selectClass}
           >
-            <option value="all">All types</option>
+            <option value="">All types</option>
             {typeOptions.map((t) => (
               <option key={t} value={t}>
                 {TYPE_LABELS[t] ?? t}
               </option>
             ))}
           </select>
+          {(staleCount > 0 || staleOnly) && (
+            <button
+              type="button"
+              onClick={toggleStale}
+              aria-pressed={staleOnly}
+              title="Prices that are out of date: an old mark, a missing quote or no Treasury curve. Hover a row's stale badge for the reason."
+              className={`inline-flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                staleOnly
+                  ? "bg-yellow-500/15 text-yellow-500"
+                  : "bg-highlight text-foreground hover:bg-card-border"
+              }`}
+            >
+              <span className="tabular-nums">{staleCount}</span>
+              {staleCount === 1 ? "stale price" : "stale prices"}
+              {staleOnly && <span className="text-muted">· show all</span>}
+            </button>
+          )}
           {filtering && (
-            <span className="text-xs text-muted">
-              {filtered.length} of {holdings.length}
+            <span className="text-xs text-muted tabular-nums">
+              {filtered.length} of {scoped.length}
             </span>
           )}
           <a
-            href={`/api/${fund}/holdings/export`}
+            href={holdingsExportHref(fund, filter)}
+            title={
+              filtering
+                ? "Download the holdings shown, as a CSV file."
+                : "Download every holding, as a CSV file."
+            }
             className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-input-border bg-input-bg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-highlight"
           >
             <Download className="h-3.5 w-3.5" aria-hidden="true" />
@@ -595,29 +844,25 @@ export function HoldingsTable({
       {filtered.length === 0 ? (
         <div className="p-8 text-center">
           <p className="text-sm text-muted">
-            No holdings match these filters.
+            {staleOnly && !query.trim() && !sectorFilter && !typeFilter
+              ? "Every price is current."
+              : "No holdings match these filters."}
           </p>
-          <Button
-            variant="ghost"
-            className="mt-2"
-            onClick={() => {
-              setSectorFilter("all");
-              setTypeFilter("all");
-            }}
-          >
+          <Button variant="ghost" className="mt-2" onClick={clearFilters}>
             Clear filters
           </Button>
         </div>
       ) : (
         <div className={compact ? "overflow-auto" : "max-h-[70vh] overflow-auto"}>
           <table
-            className="w-full"
-            style={{ minWidth: assetClass === "equity" ? 900 : 1000 }}
+            className={`w-full ${
+              assetClass === "equity" ? "sm:min-w-[900px]" : "sm:min-w-[1000px]"
+            }`}
           >
             <thead>
               <tr className="border-b border-card-border text-left text-xs font-medium text-muted">
                 {columns.map((col) => {
-                  const active = sort.key === col.key;
+                  const active = sort.key === sortKeyOf(col);
                   const Icon = active
                     ? sort.dir === "asc"
                       ? ArrowUp
@@ -644,14 +889,14 @@ export function HoldingsTable({
                       <button
                         type="button"
                         onClick={() => toggleSort(col)}
-                        className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap transition-colors hover:text-foreground ${
+                        className={`-mx-1 -my-2.5 inline-flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-md px-1 py-2.5 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-text sm:my-0 sm:py-0 ${
                           active ? "text-foreground" : ""
                         }`}
                       >
                         {col.label}
                         <Icon
                           className={`h-3 w-3 ${
-                            active ? "text-accent" : "opacity-40"
+                            active ? "text-accent-text" : "opacity-40"
                           }`}
                           aria-hidden="true"
                         />
@@ -665,13 +910,18 @@ export function HoldingsTable({
               {sorted.map((v) => (
                 <tr
                   key={v.holding.id}
-                  onClick={() => router.push(`/${fund}/holdings/${v.holding.id}`)}
+                  onClick={(e) => {
+                    // Links inside the row (the name, the sector) go where
+                    // they say; the rest of the row opens the holding.
+                    if ((e.target as HTMLElement).closest("a")) return;
+                    router.push(`/${fund}/holdings/${v.holding.id}`);
+                  }}
                   className="group cursor-pointer border-b border-card-border/50 transition-colors hover:bg-highlight"
                 >
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className={`py-3 text-xs sm:py-3.5 sm:text-sm ${
+                      className={`py-3 text-xs whitespace-nowrap sm:py-3.5 sm:text-sm ${
                         col.first
                           ? "sticky left-0 z-10 bg-sticky-card px-3 transition-colors group-hover:bg-highlight sm:px-6"
                           : "px-2 sm:px-4"

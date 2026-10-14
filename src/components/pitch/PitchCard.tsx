@@ -1,18 +1,30 @@
-// One pitch in a list (pitches index, admin queue). Server-safe
+// One pitch in a list (pitches index, sector page). Server-safe
 // presentational component — actions are plain links; state-changing buttons
 // live in ScheduleControls / VotePanel. The title link stretches over the
-// whole card, so anywhere on it opens the pitch; the Vote and Schedule
-// shortcuts sit above that layer.
+// whole card, so anywhere on it opens the pitch; the sector link and the
+// Vote, Submit and Schedule shortcuts sit above that layer. Vote and Submit
+// land on the pitch page's #vote and #actions cards.
 
 import Link from "next/link";
-import { CalendarClock, CheckCircle2, ChevronRight, Vote, XCircle } from "lucide-react";
+import {
+  CalendarClock,
+  CheckCircle2,
+  ChevronRight,
+  Send,
+  Vote,
+  XCircle,
+} from "lucide-react";
 import { Badge, PitchStatusBadge } from "@/components/ui/Badge";
+import { SectorLink } from "@/components/ui/SectorLink";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/format";
 import type { Pitch, PitchAction, VoteChoice } from "@/types/domain";
 
-/** Pitch row with the joins the list pages select. */
+/**
+ * Pitch row with the joins the list pages select. Select the sector as
+ * `sector:sectors(name, slug)` so its name links to the sector page.
+ */
 export interface PitchListItem extends Pitch {
-  sector?: { name: string } | null;
+  sector?: { name: string; slug?: string | null } | null;
   author?: { full_name: string } | null;
 }
 
@@ -35,22 +47,32 @@ export function PitchCard({
   pitch,
   fund,
   showSchedule = false,
+  showSubmit = false,
   myVote,
   canVote = false,
+  tradePending = false,
 }: {
   pitch: PitchListItem;
   fund: string;
   /** Officers see a Schedule shortcut on submitted pitches (SPEC 11.2). */
   showSchedule?: boolean;
+  /**
+   * The viewer may submit this pitch (its sector leader, an officer): a
+   * draft gets a Submit shortcut to the pitch page's Actions card.
+   */
+  showSubmit?: boolean;
   /** The viewer's own ballot on this pitch, when they cast one. */
   myVote?: VoteChoice;
   /** Whether the viewer holds a vote at all (active members). */
   canVote?: boolean;
+  /** It passed and its trade ticket is still waiting to be executed. */
+  tradePending?: boolean;
 }) {
   const closed =
     pitch.status === "passed" ||
     pitch.status === "failed" ||
     pitch.status === "executed";
+  const pitchHref = `/${fund}/pitches/${pitch.id}`;
 
   return (
     <div className="glass-card relative p-4 transition-colors hover:bg-highlight sm:p-5">
@@ -58,17 +80,30 @@ export function PitchCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href={`/${fund}/pitches/${pitch.id}`}
+              href={pitchHref}
               className="font-semibold after:absolute after:inset-0 after:rounded-[inherit] hover:underline"
             >
               {pitch.title}
             </Link>
             <PitchStatusBadge status={pitch.status} />
             {pitch.pitch_type === "bear" && <Badge tone="loss">bear case</Badge>}
+            {tradePending && pitch.status === "passed" && (
+              <Badge tone="info">ticket pending</Badge>
+            )}
           </div>
           <p className="mt-1 text-xs text-muted sm:text-sm">
             {pitchActionLine(pitch)}
-            {pitch.sector?.name ? ` · ${pitch.sector.name}` : ""}
+            {pitch.sector?.name && (
+              <>
+                {" · "}
+                <SectorLink
+                  fund={fund}
+                  slug={pitch.sector.slug}
+                  name={pitch.sector.name}
+                  className="relative z-10"
+                />
+              </>
+            )}
             {pitch.author?.full_name ? ` · ${pitch.author.full_name}` : ""}
             {closed && pitch.closed_at
               ? ` · closed ${formatDate(pitch.closed_at)}`
@@ -101,11 +136,11 @@ export function PitchCard({
               )}
               {canVote && (
                 <Link
-                  href={`/${fund}/pitches/${pitch.id}`}
+                  href={`${pitchHref}#vote`}
                   className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                     myVote
                       ? "bg-highlight hover:bg-card-border"
-                      : "bg-accent text-white hover:bg-accent-hover"
+                      : "bg-accent text-on-accent hover:bg-accent-hover"
                   }`}
                 >
                   <Vote className="h-3.5 w-3.5" />
@@ -128,16 +163,24 @@ export function PitchCard({
               </p>
             </div>
           )}
+          {showSubmit && pitch.status === "draft" && (
+            <Link
+              href={`${pitchHref}#actions`}
+              className="inline-flex items-center gap-1 rounded-lg border border-input-border bg-input-bg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-highlight"
+            >
+              <Send className="h-3.5 w-3.5" /> Submit
+            </Link>
+          )}
           {showSchedule && pitch.status === "submitted" && (
             <Link
-              href={`/${fund}/admin/pitches`}
+              href={`${pitchHref}#actions`}
               className="inline-flex items-center gap-1 rounded-lg border border-input-border bg-input-bg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-highlight"
             >
               <CalendarClock className="h-3.5 w-3.5" /> Schedule
             </Link>
           )}
           <Link
-            href={`/${fund}/pitches/${pitch.id}`}
+            href={pitchHref}
             aria-label={`Open ${pitch.title}`}
             className="text-muted transition-colors hover:text-foreground"
           >

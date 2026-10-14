@@ -2,11 +2,21 @@
 
 // The two officer password tools (SPEC Section 7). "Send reset link" emails
 // the member directly; "Set temporary password" shows the password once.
+// For someone who never finished signing up the first button reads "Resend
+// invite": the same link lets them set a password, so it is the way to
+// replace an invite that lapsed.
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 
-export function PasswordTools({ userId }: { userId: string }) {
+export function PasswordTools({
+  userId,
+  invite = false,
+}: {
+  userId: string;
+  /** The member has not signed up yet: offer the link as a fresh invite. */
+  invite?: boolean;
+}) {
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,10 +35,17 @@ export function PasswordTools({ userId }: { userId: string }) {
     setBusy(null);
     const data = await res.json().catch(() => null);
     if (!res.ok) {
-      setError(data?.error ?? "Could not send the reset link.");
+      setError(
+        data?.error ??
+          (invite ? "Could not resend the invite." : "Could not send the reset link.")
+      );
       return;
     }
-    setNotice("Reset link emailed to the member.");
+    setNotice(
+      invite
+        ? "Invite resent. The member was emailed a link to set their password."
+        : "Reset link emailed to the member."
+    );
   }
 
   async function setTemp() {
@@ -59,8 +76,16 @@ export function PasswordTools({ userId }: { userId: string }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={sendReset} disabled={busy !== null}>
-          {busy === "reset" ? "Sending…" : "Send reset link"}
+        <Button
+          variant={invite ? "primary" : "secondary"}
+          onClick={sendReset}
+          disabled={busy !== null}
+        >
+          {busy === "reset"
+            ? "Sending…"
+            : invite
+            ? "Resend invite"
+            : "Send reset link"}
         </Button>
         <Button variant="secondary" onClick={setTemp} disabled={busy !== null}>
           {busy === "temp" ? "Setting…" : "Set temporary password"}

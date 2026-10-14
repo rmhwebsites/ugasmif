@@ -55,7 +55,7 @@ export function CashMovementForm({
       return;
     }
     setNotice(
-      `Recorded. New cash balance: ${formatCurrency(Number(data.cash_balance))}`
+      `Recorded. Cash is now ${formatCurrency(Number(data.cash_balance))}.`
     );
     setForm({ ...form, amount: "", notes: "" });
     router.refresh();
