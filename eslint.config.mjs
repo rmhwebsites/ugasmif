@@ -10,6 +10,8 @@ const eslintConfig = [
       "node_modules/**",
       "public/sw.js",
       "public/theme-init.js",
+      // Third-party agent skills (npx skills add), kept as published.
+      ".claude/skills/**",
     ],
   },
 ];
