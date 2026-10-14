@@ -20,7 +20,7 @@ import type {
   TradeTicket,
 } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Fund Admin" };
+export const metadata: Metadata = { title: "Fund admin" };
 
 type MemberRow = Membership & { profiles: Pick<Profile, "full_name" | "created_at"> | null };
 
@@ -168,7 +168,7 @@ export default async function AdminChecklistPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Fund Admin</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Fund admin</h1>
 
       <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
         {items.map((item) => (

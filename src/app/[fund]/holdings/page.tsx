@@ -12,6 +12,8 @@ import { HoldingsTable } from "@/components/holdings/HoldingsTable";
 import { Badge } from "@/components/ui/Badge";
 import { AlumniNotice } from "@/components/ui/AlumniNotice";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { ManageLink, PageHeader } from "@/components/ui/PageHeader";
+import { can } from "@/lib/permissions";
 
 export const metadata: Metadata = { title: "Holdings" };
 
@@ -26,8 +28,8 @@ export default async function HoldingsPage({
 
   if (!ctx.canViewCurrent) {
     return (
-      <div className="space-y-4 sm:space-y-6">
-        <h1 className="text-2xl font-bold sm:text-3xl">Holdings</h1>
+      <div className="space-y-6">
+        <PageHeader title="Holdings" />
         <AlumniNotice fundName={ctx.fund.name} />
       </div>
     );
@@ -38,13 +40,18 @@ export default async function HoldingsPage({
   const positions = valuation.holdings.length;
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-bold sm:text-3xl">Holdings</h1>
-        <p className="text-xs text-muted">
-          As of {formatDateTime(valuation.asOf)} ET
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Holdings"
+        description={`Every position the fund holds, as of ${formatDateTime(valuation.asOf)} ET.`}
+        actions={
+          can(ctx, "manage_holdings") ? (
+            <ManageLink href={`/${ctx.fund.slug}/admin/holdings`}>
+              Manage holdings
+            </ManageLink>
+          ) : undefined
+        }
+      />
 
       {/* Summary line */}
       <div className="glass-card flex flex-wrap items-center gap-x-6 gap-y-1.5 px-4 py-3 text-sm sm:px-6">

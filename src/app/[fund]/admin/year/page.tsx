@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { formatDate } from "@/lib/format";
 import type { AcademicYear } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Academic Year" };
+export const metadata: Metadata = { title: "Academic year" };
 
 function nextYearLabel(current: string): string | null {
   const m = current.match(/^(\d{4})-(\d{2})$/);
@@ -53,7 +53,7 @@ export default async function YearAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Academic Year</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Academic year</h1>
 
       <Card>
         <CardHeader title="Years" />

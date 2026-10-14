@@ -9,7 +9,7 @@ import { UpdateEditor } from "@/components/admin/UpdateEditor";
 import { Card, CardHeader } from "@/components/ui/Card";
 import type { FundUpdate } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Updates Admin" };
+export const metadata: Metadata = { title: "Post an update" };
 
 export default async function UpdatesAdminPage({
   params,
@@ -42,7 +42,7 @@ export default async function UpdatesAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Updates</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Post an update</h1>
       <Card>
         <CardHeader title="Post an update" />
         <div className="p-4 sm:p-6">

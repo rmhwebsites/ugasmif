@@ -9,10 +9,13 @@ export function LogoutButton({
   className = "",
   variant = "secondary",
   children = "Sign out",
+  label,
 }: {
   className?: string;
   variant?: "primary" | "secondary" | "danger" | "ghost";
   children?: ReactNode;
+  /** Accessible name and tooltip, for an icon-only button. */
+  label?: string;
 } = {}) {
   const router = useRouter();
 
@@ -24,7 +27,13 @@ export function LogoutButton({
   }
 
   return (
-    <Button variant={variant} onClick={handleLogout} className={className}>
+    <Button
+      variant={variant}
+      onClick={handleLogout}
+      className={className}
+      aria-label={label}
+      title={label}
+    >
       {children}
     </Button>
   );

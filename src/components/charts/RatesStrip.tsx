@@ -40,7 +40,7 @@ export function RatesStrip() {
 
   return (
     <div className="glass-card px-4 py-3 sm:px-6">
-      <p className="text-[11px] uppercase tracking-wider text-muted sm:text-xs">
+      <p className="text-sm text-muted">
         Treasury yields
       </p>
       {failed ? (

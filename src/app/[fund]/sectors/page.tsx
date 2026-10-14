@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/Badge";
 import { PitchStatusBadge } from "@/components/ui/Badge";
 import { formatPercent } from "@/lib/format";
 import type { Membership, Pitch, Profile, Sector } from "@/types/domain";
+import { ManageLink, PageHeader } from "@/components/ui/PageHeader";
+import { can } from "@/lib/permissions";
 
 export const metadata: Metadata = { title: "Sectors" };
 
@@ -59,8 +61,18 @@ export default async function SectorsPage({
   );
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Sectors</h1>
+    <div className="space-y-6">
+      <PageHeader
+        title="Sectors"
+        description="Each sector team with its holdings, and its weight against target and benchmark."
+        actions={
+          can(ctx, "set_sector_targets") ? (
+            <ManageLink href={`/${ctx.fund.slug}/admin/sectors`}>
+              Manage sectors
+            </ManageLink>
+          ) : undefined
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 [&>*]:min-w-0">
         {sectors.map((sector) => {
@@ -105,7 +117,7 @@ export default async function SectorsPage({
 
               <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm tabular-nums">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted">
+                  <p className="text-xs text-muted">
                     Weight
                   </p>
                   <p className="font-semibold">
@@ -113,7 +125,7 @@ export default async function SectorsPage({
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted">
+                  <p className="text-xs text-muted">
                     Target
                   </p>
                   <p className="font-semibold">
@@ -121,7 +133,7 @@ export default async function SectorsPage({
                   </p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted">
+                  <p className="text-xs text-muted">
                     Benchmark
                   </p>
                   <p className="font-semibold">

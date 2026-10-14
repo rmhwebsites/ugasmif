@@ -63,7 +63,7 @@ export default async function MembersAdminPage({
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold sm:text-3xl">Members</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Members</h1>
           <p className="mt-0.5 text-sm text-muted">
             {ctx.currentYear.label} · {members.length} on the roster
           </p>

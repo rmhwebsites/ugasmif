@@ -17,7 +17,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { formatCurrency } from "@/lib/format";
 import type { Holding, TradeTicket } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Trade Tickets" };
+export const metadata: Metadata = { title: "Trade tickets" };
 
 type HoldingPosition = Pick<Holding, "id" | "quantity" | "avg_cost">;
 
@@ -100,7 +100,7 @@ export default async function AdminTicketsPage({
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-bold sm:text-3xl">Trade tickets</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Trade tickets</h1>
         <p className="text-xs text-muted tabular-nums">
           Cash available: {formatCurrency(cashBalance)}
         </p>

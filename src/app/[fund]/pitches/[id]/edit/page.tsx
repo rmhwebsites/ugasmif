@@ -84,7 +84,7 @@ export default async function EditPitchPage({
           <ArrowLeft className="h-3.5 w-3.5" /> Pitch page
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold sm:text-2xl">Edit pitch</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Edit pitch</h1>
           <PitchStatusBadge status={pitch.status} />
         </div>
         <p className="text-xs text-muted sm:text-sm">

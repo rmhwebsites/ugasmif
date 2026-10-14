@@ -15,7 +15,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { formatCurrency } from "@/lib/format";
 import type { BondMark, Holding, Sector } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Holdings Admin" };
+export const metadata: Metadata = { title: "Manage holdings" };
 
 export default async function HoldingsAdminPage({
   params,
@@ -76,7 +76,7 @@ export default async function HoldingsAdminPage({
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-bold sm:text-3xl">Holdings Admin</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Manage holdings</h1>
         <p className="text-sm text-muted">
           Cash balance{" "}
           <span className="font-semibold text-foreground tabular-nums">

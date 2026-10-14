@@ -92,7 +92,7 @@ export function HoldingsAdmin({
       <div className="max-h-[70vh] overflow-auto">
         <table className="w-full text-sm" style={{ minWidth: 640 }}>
           <thead>
-            <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
+            <tr className="border-b border-card-border text-left text-xs text-muted">
               {HEADERS.map((head, i) => (
                 <th
                   key={head.key}
@@ -104,7 +104,7 @@ export function HoldingsAdmin({
                         : "descending"
                       : undefined
                   }
-                  className={`sticky top-0 z-20 bg-sticky py-2.5 font-medium backdrop-blur-xl ${
+                  className={`sticky top-0 z-20 bg-sticky-card py-2.5 font-medium ${
                     i === 0 ? "left-0 z-30 px-4" : "px-3"
                   } ${head.align === "right" ? "text-right" : "text-left"}`}
                 >
@@ -116,7 +116,7 @@ export function HoldingsAdmin({
                   />
                 </th>
               ))}
-              <th className="sticky top-0 z-20 bg-sticky px-3 py-2.5 text-right font-medium backdrop-blur-xl">
+              <th className="sticky top-0 z-20 bg-sticky-card px-3 py-2.5 text-right font-medium">
                 Actions
               </th>
             </tr>
@@ -188,7 +188,7 @@ function HoldingRows({
           h.is_active ? "" : "opacity-45"
         }`}
       >
-        <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 backdrop-blur-xl">
+        <td className="sticky left-0 z-10 bg-sticky-card px-4 py-2.5">
           <p className="font-medium">
             {h.symbol ? `${h.symbol} · ` : ""}
             {h.name}

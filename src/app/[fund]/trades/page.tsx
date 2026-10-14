@@ -17,6 +17,7 @@ import { TradeLedgerTable } from "@/components/tables/TradeLedgerTable";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { Holding, Sector, Trade, TradeTicket } from "@/types/domain";
+import { ManageLink, PageHeader } from "@/components/ui/PageHeader";
 
 export const metadata: Metadata = { title: "Trades" };
 
@@ -150,21 +151,31 @@ export default async function TradesPage({
     "rounded-lg border border-input-border bg-input-bg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-accent";
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-bold sm:text-3xl">Trades</h1>
-        <p className="text-xs text-muted">
-          {trades.length === LEDGER_LIMIT
-            ? `Most recent ${LEDGER_LIMIT} trades`
-            : `${trades.length} ${trades.length === 1 ? "trade" : "trades"}`}
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Trades"
+        description={`Tickets waiting to be placed, then the ledger of every trade. ${
+          trades.length === LEDGER_LIMIT
+            ? `Showing the most recent ${LEDGER_LIMIT}.`
+            : `${trades.length} ${trades.length === 1 ? "trade" : "trades"} so far.`
+        }`}
+        actions={
+          mayExecute ? (
+            <ManageLink href={`/${ctx.fund.slug}/admin/tickets`}>
+              Manage tickets
+            </ManageLink>
+          ) : undefined
+        }
+      />
 
       {/* Pending tickets */}
       {tickets.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
-            Pending tickets ({tickets.length})
+          <h2 className="text-lg font-semibold">
+            Waiting to be placed
+            <span className="ml-2 text-sm font-normal text-muted tabular-nums">
+              {tickets.length}
+            </span>
           </h2>
           <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
             {tickets.map((ticket) => (

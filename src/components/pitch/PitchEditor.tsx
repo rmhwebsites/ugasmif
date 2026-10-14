@@ -606,7 +606,7 @@ export function PitchEditor({
           <p className="rounded-lg bg-highlight px-3 py-2 text-xs text-muted">
             Rebalance pitch: put the proposed sector target table at the top of
             the thesis. If it passes, an officer applies the new targets under
-            Fund Admin → Sectors — nothing changes automatically.
+            Fund admin → Sectors. Nothing changes on its own.
           </p>
         )}
 
@@ -746,7 +746,7 @@ export function PitchEditor({
                   >
                     <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted" />
                     <span className="min-w-0 flex-1 truncate">{f.file_name}</span>
-                    <span className="text-[10px] uppercase tracking-wider text-muted">
+                    <span className="text-xs text-muted">
                       {f.kind}
                     </span>
                     <button

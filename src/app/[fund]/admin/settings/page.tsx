@@ -8,7 +8,7 @@ import { can, hasFundAdminAccess } from "@/lib/permissions";
 import { SettingsForm } from "@/components/admin/SettingsForm";
 import { Card, CardHeader } from "@/components/ui/Card";
 
-export const metadata: Metadata = { title: "Fund Settings" };
+export const metadata: Metadata = { title: "Fund settings" };
 
 export default async function SettingsPage({
   params,
@@ -23,7 +23,7 @@ export default async function SettingsPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Fund Settings</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Fund settings</h1>
       <Card>
         <CardHeader title={ctx.fund.name} />
         <div className="p-4 sm:p-6">

@@ -27,7 +27,7 @@ export default async function AdminLayout({
   if (!fullAccess && !targetsOnly) notFound();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {fullAccess ? (
         <AdminNav fund={ctx.fund.slug} />
       ) : (

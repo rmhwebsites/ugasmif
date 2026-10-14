@@ -1,12 +1,14 @@
-// One pitch in a list (pitches index, votes page, admin queue). Server-safe
+// One pitch in a list (pitches index, admin queue). Server-safe
 // presentational component — actions are plain links; state-changing buttons
-// live in ScheduleControls / VotePanel.
+// live in ScheduleControls / VotePanel. The title link stretches over the
+// whole card, so anywhere on it opens the pitch; the Vote and Schedule
+// shortcuts sit above that layer.
 
 import Link from "next/link";
-import { CalendarClock, ChevronRight, Vote } from "lucide-react";
+import { CalendarClock, CheckCircle2, ChevronRight, Vote, XCircle } from "lucide-react";
 import { Badge, PitchStatusBadge } from "@/components/ui/Badge";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/format";
-import type { Pitch, PitchAction } from "@/types/domain";
+import type { Pitch, PitchAction, VoteChoice } from "@/types/domain";
 
 /** Pitch row with the joins the list pages select. */
 export interface PitchListItem extends Pitch {
@@ -33,11 +35,17 @@ export function PitchCard({
   pitch,
   fund,
   showSchedule = false,
+  myVote,
+  canVote = false,
 }: {
   pitch: PitchListItem;
   fund: string;
   /** Officers see a Schedule shortcut on submitted pitches (SPEC 11.2). */
   showSchedule?: boolean;
+  /** The viewer's own ballot on this pitch, when they cast one. */
+  myVote?: VoteChoice;
+  /** Whether the viewer holds a vote at all (active members). */
+  canVote?: boolean;
 }) {
   const closed =
     pitch.status === "passed" ||
@@ -45,13 +53,13 @@ export function PitchCard({
     pitch.status === "executed";
 
   return (
-    <div className="glass-card p-4 transition-colors hover:bg-highlight/50 sm:p-5">
+    <div className="glass-card relative p-4 transition-colors hover:bg-highlight sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href={`/${fund}/pitches/${pitch.id}`}
-              className="font-semibold hover:underline"
+              className="font-semibold after:absolute after:inset-0 after:rounded-[inherit] hover:underline"
             >
               {pitch.title}
             </Link>
@@ -62,11 +70,14 @@ export function PitchCard({
             {pitchActionLine(pitch)}
             {pitch.sector?.name ? ` · ${pitch.sector.name}` : ""}
             {pitch.author?.full_name ? ` · ${pitch.author.full_name}` : ""}
-            {` · ${formatDate(pitch.created_at)}`}
+            {closed && pitch.closed_at
+              ? ` · closed ${formatDate(pitch.closed_at)}`
+              : ` · ${formatDate(pitch.created_at)}`}
+            {closed && myVote ? ` · you voted ${myVote}` : ""}
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 text-right">
+        <div className="relative z-10 flex shrink-0 items-center gap-3 text-right">
           {pitch.status === "scheduled" && pitch.scheduled_for && (
             <span className="flex items-center gap-1 text-xs text-muted">
               <CalendarClock className="h-3.5 w-3.5" />
@@ -74,16 +85,33 @@ export function PitchCard({
             </span>
           )}
           {pitch.status === "voting" && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <span className="text-xs text-muted">
-                Closes {formatDateTime(pitch.vote_closes_at)}
+                Closes {formatDateTime(pitch.vote_closes_at)} ET
               </span>
-              <Link
-                href={`/${fund}/pitches/${pitch.id}`}
-                className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-hover"
-              >
-                <Vote className="h-3.5 w-3.5" /> Vote
-              </Link>
+              {myVote === "yes" && (
+                <Badge tone="gain">
+                  <CheckCircle2 className="h-3 w-3" /> You voted yes
+                </Badge>
+              )}
+              {myVote === "no" && (
+                <Badge tone="loss">
+                  <XCircle className="h-3 w-3" /> You voted no
+                </Badge>
+              )}
+              {canVote && (
+                <Link
+                  href={`/${fund}/pitches/${pitch.id}`}
+                  className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    myVote
+                      ? "bg-highlight hover:bg-card-border"
+                      : "bg-accent text-white hover:bg-accent-hover"
+                  }`}
+                >
+                  <Vote className="h-3.5 w-3.5" />
+                  {myVote ? "Change vote" : "Vote"}
+                </Link>
+              )}
             </div>
           )}
           {closed && pitch.result_pct !== null && (

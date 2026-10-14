@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { AuditTable } from "@/components/tables/AuditTable";
 import type { AuditLogEntry, Membership, Profile } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Audit Log" };
+export const metadata: Metadata = { title: "Audit log" };
 
 type MemberRow = Membership & {
   profiles: Pick<Profile, "id" | "full_name"> | null;
@@ -74,7 +74,7 @@ export default async function AuditPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Audit Log</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Audit log</h1>
 
       <form className="glass-card flex flex-wrap items-end gap-2 p-4">
         <label className="min-w-[8rem] flex-1 text-xs text-muted">

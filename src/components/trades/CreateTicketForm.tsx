@@ -23,7 +23,7 @@ const INSTRUMENT_OPTIONS: { value: InstrumentType; label: string }[] = [
   { value: "corporate", label: "Corporate" },
   { value: "agency_mbs", label: "Agency MBS" },
   { value: "municipal", label: "Municipal" },
-  { value: "money_market", label: "Money Market" },
+  { value: "money_market", label: "Money market" },
 ];
 
 export function CreateTicketForm({

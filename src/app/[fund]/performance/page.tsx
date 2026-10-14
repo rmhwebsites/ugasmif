@@ -58,6 +58,7 @@ import type {
   FundValuation,
   TreasuryCurvePoint,
 } from "@/types/domain";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 const MONTH_HEADERS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -279,8 +280,8 @@ export default async function PerformancePage({
 
   if (!ctx.canViewCurrent) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-xl font-bold sm:text-2xl">Performance</h1>
+      <div className="space-y-6">
+        <PageHeader title="Performance" />
         <AlumniNotice fundName={ctx.fund.name} />
       </div>
     );
@@ -308,13 +309,10 @@ export default async function PerformancePage({
   const flows = (flowsRes.data as CashMovement[] | null) ?? [];
 
   const header = (
-    <div>
-      <h1 className="text-xl font-bold sm:text-2xl">Performance</h1>
-      <p className="text-xs text-muted sm:text-sm">
-        Time-weighted returns, net of external flows · Benchmark:{" "}
-        {fund.benchmark_name}
-      </p>
-    </div>
+    <PageHeader
+      title="Performance"
+      description={`Time-weighted returns, net of money added or withdrawn, against the ${fund.benchmark_name}.`}
+    />
   );
 
   const byWeight = [...v.holdings].sort((a, b) => b.weightPct - a.weightPct);
@@ -545,8 +543,8 @@ export default async function PerformancePage({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-card-border text-left text-[11px] uppercase tracking-wider text-muted">
-                <th className="sticky left-0 z-10 bg-sticky px-4 py-2.5 font-medium backdrop-blur-xl sm:px-6">
+              <tr className="border-b border-card-border text-left text-xs font-medium text-muted">
+                <th className="sticky left-0 z-10 bg-sticky-card px-4 py-2.5 font-medium sm:px-6">
                   Period
                 </th>
                 <th className="px-3 py-2.5 text-right font-medium">Fund</th>
@@ -564,7 +562,7 @@ export default async function PerformancePage({
                   key={r.label}
                   className="border-b border-card-border/50 last:border-0"
                 >
-                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 backdrop-blur-xl sm:px-6">
+                  <td className="sticky left-0 z-10 bg-sticky-card px-4 py-2.5 sm:px-6">
                     <span className="font-medium">{r.label}</span>
                     <span className="ml-2 hidden text-xs text-muted sm:inline">
                       {PERIOD_LABELS[r.label] ?? ""}
@@ -606,19 +604,19 @@ export default async function PerformancePage({
         <div className="max-h-[70vh] overflow-auto">
           <table className="w-full text-xs sm:text-sm">
             <thead>
-              <tr className="border-b border-card-border text-[11px] uppercase tracking-wider text-muted">
-                <th className="sticky left-0 top-0 z-30 bg-sticky px-4 py-2 text-left font-medium backdrop-blur-xl sm:px-6">
+              <tr className="border-b border-card-border text-xs font-medium text-muted">
+                <th className="sticky left-0 top-0 z-30 bg-sticky-card px-4 py-2 text-left font-medium sm:px-6">
                   Year
                 </th>
                 {MONTH_HEADERS.map((m) => (
                   <th
                     key={m}
-                    className="sticky top-0 z-20 bg-sticky px-2 py-2 text-right font-medium backdrop-blur-xl"
+                    className="sticky top-0 z-20 bg-sticky-card px-2 py-2 text-right font-medium"
                   >
                     {m}
                   </th>
                 ))}
-                <th className="sticky top-0 z-20 bg-sticky px-2 py-2 pr-4 text-right font-medium backdrop-blur-xl sm:pr-6">
+                <th className="sticky top-0 z-20 bg-sticky-card px-2 py-2 pr-4 text-right font-medium sm:pr-6">
                   Total
                 </th>
               </tr>
@@ -629,7 +627,7 @@ export default async function PerformancePage({
                   key={row.year}
                   className="border-b border-card-border/50 last:border-0"
                 >
-                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2 font-medium backdrop-blur-xl sm:px-6">
+                  <td className="sticky left-0 z-10 bg-sticky-card px-4 py-2 font-medium sm:px-6">
                     {row.year}
                   </td>
                   {row.months.map((m, i) => (

@@ -1,16 +1,21 @@
-// /[fund]/attendance — own record for members; officers see everyone
-// (SPEC 11.2).
+// /[fund]/attendance, shown as "Meetings": the class calendar first, then
+// your own attendance; officers also see everyone's rate (SPEC 11.2).
+//
+// The first thing a member wants from this page is when class meets next and
+// what is on, so the calendar leads. Upcoming sessions have no attendance to
+// show yet, so they are listed apart from the record instead of reading
+// "not recorded" down the page.
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { can } from "@/lib/permissions";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ManageLink, PageHeader } from "@/components/ui/PageHeader";
 import { AttendanceRateTable } from "@/components/tables/AttendanceRateTable";
-import { formatDate, formatPercent } from "@/lib/format";
+import { easternDateString, formatDay, formatPercent } from "@/lib/format";
 import type {
   Meeting,
   MeetingAttendance,
@@ -18,13 +23,18 @@ import type {
   Profile,
 } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Attendance" };
+export const metadata: Metadata = { title: "Meetings" };
 
 type MemberRow = Membership & {
   profiles: Pick<Profile, "full_name"> | null;
 };
 
-export default async function AttendancePage({
+/** Imported titles carry stray double spaces ("Speaker:  David Braun"). */
+function tidy(title: string | null): string {
+  return title ? title.replace(/\s+/g, " ").trim() : "Fund meeting";
+}
+
+export default async function MeetingsPage({
   params,
 }: {
   params: Promise<{ fund: string }>;
@@ -41,7 +51,7 @@ export default async function AttendancePage({
       .from("meetings")
       .select("*")
       .eq("fund_id", ctx.fund.id)
-      .order("meeting_date", { ascending: false }),
+      .order("meeting_date", { ascending: true }),
     supabase.from("meeting_attendance").select("*"),
     seesEveryone
       ? supabase
@@ -60,7 +70,11 @@ export default async function AttendancePage({
   );
   const members = (membersRes.data as MemberRow[]) ?? [];
 
-  const myRecords = meetings.map((m) => {
+  const today = easternDateString();
+  const upcoming = meetings.filter((m) => m.meeting_date >= today);
+  const past = meetings.filter((m) => m.meeting_date < today).reverse();
+
+  const myRecords = past.map((m) => {
     const row = attendance.find(
       (a) => a.meeting_id === m.id && a.user_id === ctx.profile.id
     );
@@ -69,89 +83,139 @@ export default async function AttendancePage({
   const attended = myRecords.filter((r) => r.present === true).length;
   const recorded = myRecords.filter((r) => r.present !== null).length;
 
+  const [next, ...later] = upcoming;
+  // App admins and the advisor can open any fund without being on its
+  // roster; they have no record of their own to show.
+  const hasRecord = ctx.membership !== null;
+
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold sm:text-3xl">Attendance</h1>
-        {seesEveryone && (
-          <Link
-            href={`/${ctx.fund.slug}/admin/attendance`}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
-          >
-            Record attendance
-          </Link>
-        )}
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Meetings"
+        description={
+          hasRecord
+            ? "The class calendar and your attendance."
+            : "The class calendar."
+        }
+        actions={
+          seesEveryone ? (
+            <ManageLink href={`/${ctx.fund.slug}/admin/attendance`}>
+              Record attendance
+            </ManageLink>
+          ) : undefined
+        }
+      />
 
       {meetings.length === 0 ? (
         <EmptyState
-          title="No meetings recorded yet"
-          hint="Officers create meetings and take attendance from the admin page."
+          title="No meetings on the calendar yet"
+          hint="Officers add the term's sessions and take attendance from Fund admin."
         />
       ) : (
-        <>
-          {/* Own record */}
-          <section className="glass-card p-4 sm:p-6">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold sm:text-lg">
-                Your record
-              </h2>
-              {recorded > 0 && (
-                <span className="text-sm text-muted tabular-nums">
-                  {attended}/{recorded} ·{" "}
-                  {formatPercent((attended / recorded) * 100, 0)}
-                </span>
-              )}
-            </div>
-            <ul className="grid gap-1.5">
-              {myRecords.map(({ meeting, present }) => (
-                <li
-                  key={meeting.id}
-                  className="flex items-center justify-between rounded-lg bg-highlight px-3 py-2 text-sm"
-                >
-                  <span>
-                    {formatDate(meeting.meeting_date)}
-                    {meeting.title && (
-                      <span className="text-muted"> · {meeting.title}</span>
-                    )}
-                  </span>
-                  {present === true ? (
-                    <Badge tone="gain">present</Badge>
-                  ) : present === false ? (
-                    <Badge tone="loss">absent</Badge>
-                  ) : (
-                    <Badge tone="neutral">not recorded</Badge>
-                  )}
-                </li>
-              ))}
-            </ul>
+        <div
+          className={`grid gap-6 [&>*]:min-w-0 ${hasRecord ? "lg:grid-cols-2" : ""}`}
+        >
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Coming up</h2>
+            {next ? (
+              <>
+                <div className="glass-card p-5 sm:p-6">
+                  <p className="text-sm text-muted">Next meeting</p>
+                  <p className="mt-1 text-2xl font-semibold tracking-tight">
+                    {formatDay(next.meeting_date)}
+                  </p>
+                  <p className="mt-1 text-base">{tidy(next.title)}</p>
+                </div>
+                {later.length > 0 && (
+                  <ul className="glass-card divide-y divide-card-border overflow-hidden">
+                    {later.map((m) => (
+                      <li
+                        key={m.id}
+                        className="flex items-baseline gap-4 px-5 py-3 text-sm"
+                      >
+                        <span className="w-24 shrink-0 tabular-nums text-muted">
+                          {formatDay(m.meeting_date)}
+                        </span>
+                        <span className="min-w-0">{tidy(m.title)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <p className="glass-card p-5 text-sm text-muted">
+                Nothing else on the calendar this term.
+              </p>
+            )}
           </section>
 
-          {/* Everyone (officers, advisor) */}
-          {seesEveryone && members.length > 0 && (
-            <section className="glass-card overflow-hidden">
-              <div className="border-b border-card-border px-4 py-3 sm:px-6">
-                <h2 className="text-base font-semibold sm:text-lg">
-                  All members
-                </h2>
+          {hasRecord && (
+            <section className="space-y-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 className="text-lg font-semibold">Your attendance</h2>
+                {recorded > 0 && (
+                  <span className="text-sm tabular-nums text-muted">
+                    {attended} of {recorded} ·{" "}
+                    {formatPercent((attended / recorded) * 100, 0)}
+                  </span>
+                )}
               </div>
-              <AttendanceRateTable
-                rows={members.map((m) => {
-                  const theirs = attendance.filter(
-                    (a) => a.user_id === m.user_id
-                  );
-                  return {
-                    id: m.id,
-                    name: m.profiles?.full_name ?? "—",
-                    present: theirs.filter((a) => a.present).length,
-                    total: theirs.length,
-                    meetingsHeld: meetings.length,
-                  };
-                })}
-              />
+              {myRecords.length === 0 ? (
+                <p className="glass-card p-5 text-sm text-muted">
+                  Your record starts after the first meeting.
+                </p>
+              ) : (
+                <ul className="glass-card divide-y divide-card-border overflow-hidden">
+                  {myRecords.map(({ meeting, present }) => (
+                    <li
+                      key={meeting.id}
+                      className="flex items-center justify-between gap-3 px-5 py-3 text-sm"
+                    >
+                      <span className="flex min-w-0 items-baseline gap-4">
+                        <span className="w-24 shrink-0 tabular-nums text-muted">
+                          {formatDay(meeting.meeting_date)}
+                        </span>
+                        <span className="min-w-0 truncate">
+                          {tidy(meeting.title)}
+                        </span>
+                      </span>
+                      {present === true ? (
+                        <Badge tone="gain">present</Badge>
+                      ) : present === false ? (
+                        <Badge tone="loss">absent</Badge>
+                      ) : (
+                        <Badge tone="neutral">not recorded</Badge>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
           )}
-        </>
+        </div>
+      )}
+
+      {/* Everyone (officers, advisor) */}
+      {seesEveryone && members.length > 0 && past.length > 0 && (
+        <section className="glass-card overflow-hidden">
+          <div className="px-4 pt-4 pb-2 sm:px-6">
+            <h2 className="text-lg font-semibold">
+              Everyone&apos;s attendance
+            </h2>
+          </div>
+          <AttendanceRateTable
+            rows={members.map((m) => {
+              const theirs = attendance.filter((a) => a.user_id === m.user_id);
+              return {
+                id: m.id,
+                name: m.profiles?.full_name ?? "—",
+                present: theirs.filter((a) => a.present).length,
+                total: theirs.length,
+                meetingsHeld: past.length,
+              };
+            })}
+          />
+        </section>
       )}
     </div>
   );

@@ -149,7 +149,7 @@ function gainClass(value: number | null): string {
 }
 
 const thClass =
-  "px-3 py-2.5 text-[10px] font-medium uppercase tracking-wider text-muted sm:px-4 sm:text-xs";
+  "px-3 py-2.5 text-xs font-medium text-muted sm:px-4";
 const tdClass = "px-3 py-2.5 text-xs sm:px-4 sm:py-3 sm:text-sm";
 
 // ── Shared sections ─────────────────────────────────────────────────────────
@@ -157,7 +157,7 @@ const tdClass = "px-3 py-2.5 text-xs sm:px-4 sm:py-3 sm:text-sm";
 function TradesCard({ trades, isBond }: { trades: Trade[]; isBond: boolean }) {
   return (
     <Card className="overflow-hidden">
-      <CardHeader title="Position History" />
+      <CardHeader title="Position history" />
       <HoldingTradesTable trades={trades} isBond={isBond} />
     </Card>
   );
@@ -303,7 +303,7 @@ export default async function HoldingDetailPage({
               />
             )}
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold sm:text-3xl">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                 {isBond ? h.name : h.symbol ?? h.name}
               </h1>
               {!isBond && h.symbol && (
@@ -352,13 +352,13 @@ export default async function HoldingDetailPage({
       {/* Position stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <StatCard
-          label="Market Value"
+          label="Market value"
           value={formatCurrency(v.marketValue)}
           sub={`${formatPercent(v.weightPct)} of fund`}
           subClassName="text-muted"
         />
         <StatCard
-          label="Unrealized Gain"
+          label="Unrealized gain"
           value={
             <span className={gainClass(v.unrealizedGain)}>
               {formatSignedCurrency(v.unrealizedGain)}
@@ -370,7 +370,7 @@ export default async function HoldingDetailPage({
         {isBond ? (
           <>
             <StatCard
-              label="Face Value"
+              label="Face value"
               value={formatCurrencyWhole(quantity)}
               sub={
                 h.coupon_rate !== null
@@ -399,7 +399,7 @@ export default async function HoldingDetailPage({
               subClassName="text-muted"
             />
             <StatCard
-              label="Cost Basis"
+              label="Cost basis"
               value={formatCurrency(v.costBasis)}
               sub={h.opened_on ? `opened ${formatDate(h.opened_on)}` : undefined}
               subClassName="text-muted"
@@ -422,7 +422,7 @@ export default async function HoldingDetailPage({
       {isBond && (
         <>
           <Card className="overflow-hidden">
-            <CardHeader title="Mark History" />
+            <CardHeader title="Mark history" />
             {marks.length === 0 ? (
               <p className="p-6 text-sm text-muted">
                 {h.pricing_method === "manual"
@@ -454,7 +454,7 @@ export default async function HoldingDetailPage({
 
           <Card className="overflow-hidden">
             <CardHeader
-              title="Cash Flow Schedule"
+              title="Cash flow schedule"
               action={
                 nextCoupon ? (
                   <span className="text-xs text-muted">
@@ -474,11 +474,11 @@ export default async function HoldingDetailPage({
                   <thead>
                     <tr className="border-b border-card-border text-left">
                       <th
-                        className={`${thClass} sticky left-0 top-0 z-20 bg-sticky backdrop-blur-xl`}
+                        className={`${thClass} sticky left-0 top-0 z-20 bg-sticky-card`}
                       >
                         Date
                       </th>
-                      <th className={`${thClass} sticky top-0 bg-sticky text-right backdrop-blur-xl`}>
+                      <th className={`${thClass} sticky top-0 bg-sticky-card text-right`}>
                         Amount
                       </th>
                     </tr>
@@ -490,7 +490,7 @@ export default async function HoldingDetailPage({
                         className="border-b border-card-border/50"
                       >
                         <td
-                          className={`${tdClass} sticky left-0 z-10 bg-sticky backdrop-blur-xl`}
+                          className={`${tdClass} sticky left-0 z-10 bg-sticky-card`}
                         >
                           {formatDate(flow.date)}
                           {i === schedule.length - 1 && (

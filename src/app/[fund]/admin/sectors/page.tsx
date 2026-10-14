@@ -15,7 +15,7 @@ import {
 import { Card, CardHeader } from "@/components/ui/Card";
 import type { Sector, SectorTarget } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Sectors Admin" };
+export const metadata: Metadata = { title: "Manage sectors" };
 
 export default async function SectorsAdminPage({
   params,
@@ -56,7 +56,7 @@ export default async function SectorsAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Sectors Admin</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Manage sectors</h1>
 
       {showSectorList && (
         <Card>

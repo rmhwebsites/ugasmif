@@ -157,7 +157,7 @@ export default async function SectorWorkspacePage({
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold sm:text-3xl">{sector.name}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{sector.name}</h1>
           <p className="mt-0.5 text-sm text-muted">
             {formatPercent(sectorWeight?.weightPct ?? 0)} of the fund
             {sectorWeight?.targetWeightPct !== null &&

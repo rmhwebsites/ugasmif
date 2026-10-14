@@ -408,7 +408,7 @@ export default async function PitchDetailPage({
           <ArrowLeft className="h-3.5 w-3.5" /> All pitches
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-xl font-bold sm:text-2xl">{pitch.title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{pitch.title}</h1>
           <PitchStatusBadge status={pitch.status} />
           {pitch.pitch_type === "bear" && <Badge tone="loss">bear case</Badge>}
           {editable && (
@@ -470,7 +470,7 @@ export default async function PitchDetailPage({
               {targetPrice !== null && (
                 <dl className="grid grid-cols-2 divide-x divide-card-border border-b border-card-border text-center">
                   <div className="px-2 py-3">
-                    <dt className="text-[11px] uppercase tracking-wider text-muted">
+                    <dt className="text-xs font-medium text-muted">
                       Target price
                     </dt>
                     <dd className="mt-0.5 text-sm font-medium tabular-nums">
@@ -478,7 +478,7 @@ export default async function PitchDetailPage({
                     </dd>
                   </div>
                   <div className="px-2 py-3">
-                    <dt className="text-[11px] uppercase tracking-wider text-muted">
+                    <dt className="text-xs font-medium text-muted">
                       To target
                     </dt>
                     <dd
@@ -551,7 +551,7 @@ export default async function PitchDetailPage({
             <Card className="p-4 sm:p-5">
               <div className="flex items-center gap-2">
                 <Link2 className="h-4 w-4 text-accent" />
-                <span className="text-[11px] uppercase tracking-wider text-muted">
+                <span className="text-xs font-medium text-muted">
                   Paired {settings.paired_pitch_id ? "bear" : "bull"} pitch
                 </span>
               </div>
@@ -698,7 +698,7 @@ export default async function PitchDetailPage({
                 {pitch.action === "rebalance" ? (
                   <p className="text-muted">
                     The rebalance passed — an officer applies the new sector
-                    targets under Fund Admin → Sectors.
+                    targets under Fund admin → Sectors.
                   </p>
                 ) : ticket ? (
                   <>

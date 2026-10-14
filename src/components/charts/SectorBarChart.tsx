@@ -2,6 +2,9 @@
 
 // Horizontal grouped bars: current weight (accent) vs target (accent at 40%)
 // vs benchmark weight (gray), one row per sector. All values are percents.
+// Target and benchmark only appear once some sector has one: an empty series
+// still reserves its slot in every row, which pushed the weight bar off its
+// label, and its legend entry promised data that was not there.
 
 import {
   BarChart,
@@ -27,7 +30,7 @@ interface Props {
   fund: FundSlug;
 }
 
-function truncate(name: string, max = 16): string {
+function truncate(name: string, max = 26): string {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }
 
@@ -43,7 +46,10 @@ export function SectorBarChart({ data, fund }: Props) {
     );
   }
 
-  const height = Math.max(200, 40 + data.length * 52);
+  const hasTarget = data.some((d) => d.target !== null);
+  const hasBenchmark = data.some((d) => d.benchmark !== null);
+  const series = 1 + Number(hasTarget) + Number(hasBenchmark);
+  const height = Math.max(200, 40 + data.length * (series > 1 ? 52 : 40));
 
   return (
     <div style={{ height }}>
@@ -66,7 +72,7 @@ export function SectorBarChart({ data, fund }: Props) {
           <YAxis
             type="category"
             dataKey="name"
-            width={118}
+            width={132}
             tickFormatter={(v: string) => truncate(v)}
             tick={{ fill: theme.textColor, fontSize: 11 }}
             axisLine={false}
@@ -91,11 +97,13 @@ export function SectorBarChart({ data, fund }: Props) {
               String(name ?? ""),
             ]}
           />
-          <Legend
-            iconType="circle"
-            iconSize={8}
-            wrapperStyle={{ fontSize: 12 }}
-          />
+          {series > 1 && (
+            <Legend
+              iconType="circle"
+              iconSize={8}
+              wrapperStyle={{ fontSize: 12 }}
+            />
+          )}
           <Bar
             dataKey="weight"
             name="Weight"
@@ -103,21 +111,25 @@ export function SectorBarChart({ data, fund }: Props) {
             radius={[0, 3, 3, 0]}
             maxBarSize={10}
           />
-          <Bar
-            dataKey="target"
-            name="Target"
-            fill={theme.accent}
-            fillOpacity={0.4}
-            radius={[0, 3, 3, 0]}
-            maxBarSize={10}
-          />
-          <Bar
-            dataKey="benchmark"
-            name="Benchmark"
-            fill={theme.benchmark}
-            radius={[0, 3, 3, 0]}
-            maxBarSize={10}
-          />
+          {hasTarget && (
+            <Bar
+              dataKey="target"
+              name="Target"
+              fill={theme.accent}
+              fillOpacity={0.4}
+              radius={[0, 3, 3, 0]}
+              maxBarSize={10}
+            />
+          )}
+          {hasBenchmark && (
+            <Bar
+              dataKey="benchmark"
+              name="Benchmark"
+              fill={theme.benchmark}
+              radius={[0, 3, 3, 0]}
+              maxBarSize={10}
+            />
+          )}
         </BarChart>
       </ResponsiveContainer>
     </div>

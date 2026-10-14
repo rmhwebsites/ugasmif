@@ -137,7 +137,7 @@ export default async function AdminPitchesPage({
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold sm:text-2xl">Pitch scheduling</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Pitch scheduling</h1>
         <p className="text-xs text-muted sm:text-sm">
           Schedule submitted pitches to a class date, open the vote after the
           presentation, and close it (the nightly job closes expired windows on
@@ -276,7 +276,7 @@ export default async function AdminPitchesPage({
                       voters={voters}
                     />
                     <div>
-                      <p className="mb-2 text-[11px] uppercase tracking-wider text-muted">
+                      <p className="mb-2 text-xs font-medium text-muted">
                         Has not voted ({nonVoters.length})
                       </p>
                       {nonVoters.length === 0 ? (

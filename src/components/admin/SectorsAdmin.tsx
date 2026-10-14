@@ -250,7 +250,7 @@ export function SectorTargetsForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="grid grid-cols-[minmax(0,1fr)_68px_68px] sm:grid-cols-[minmax(0,1fr)_100px_100px] items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted">
+      <div className="grid grid-cols-[minmax(0,1fr)_68px_68px] sm:grid-cols-[minmax(0,1fr)_100px_100px] items-center gap-2 text-xs font-medium text-muted">
         <span>Sector</span>
         <span className="text-right">Target %</span>
         <span className="text-right">Benchmark %</span>

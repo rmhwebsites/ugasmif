@@ -8,7 +8,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { roleLabel, OFFICER_ROLES } from "@/lib/permissions";
+import { can, roleLabel, OFFICER_ROLES } from "@/lib/permissions";
 import { Badge } from "@/components/ui/Badge";
 import {
   MemberCarousel,
@@ -20,6 +20,7 @@ import type {
   Profile,
   Sector,
 } from "@/types/domain";
+import { ManageLink, PageHeader } from "@/components/ui/PageHeader";
 
 export const metadata: Metadata = { title: "Team" };
 
@@ -81,10 +82,20 @@ export default async function TeamPage({
   );
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold sm:text-3xl">Team</h1>
-        <div className="flex gap-1.5">
+    <div className="space-y-6">
+      <PageHeader
+        title="Team"
+        description={`Officers, sector leaders and analysts for ${selectedYear.label}.`}
+        actions={
+          can(ctx, "manage_roster") ? (
+            <ManageLink href={`/${ctx.fund.slug}/admin/members`}>
+              Manage members
+            </ManageLink>
+          ) : undefined
+        }
+      />
+      {years.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
           {years.map((y) => (
             <Link
               key={y.id}
@@ -101,7 +112,7 @@ export default async function TeamPage({
             </Link>
           ))}
         </div>
-      </div>
+      )}
 
       {!isCurrentYear && (
         <p className="rounded-lg bg-highlight px-4 py-2 text-sm text-muted">
@@ -114,7 +125,7 @@ export default async function TeamPage({
         <div className="glass-card p-8 text-center">
           <p className="font-medium">No roster for {selectedYear.label}</p>
           <p className="mt-1 text-sm text-muted">
-            Officers import the roster from the members admin page.
+            Officers import the roster from Fund admin → Members.
           </p>
         </div>
       ) : (

@@ -93,6 +93,22 @@ export function formatDate(value: string | Date | null | undefined): string {
   });
 }
 
+/**
+ * A class day as people say it: "Mon, Oct 19". For bare 'YYYY-MM-DD' dates
+ * (meetings), read in UTC for the same reason as formatDate. The year is left
+ * off because a meeting list only ever spans one term.
+ */
+export function formatDay(value: string | null | undefined): string {
+  if (!value || !DATE_ONLY.test(value)) return formatDate(value);
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function formatDateTime(value: string | Date | null | undefined): string {
   if (!value) return "—";
   // A bare date has no time to show; rendering one here would invent 8:00 PM

@@ -207,14 +207,14 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
       },
       {
         key: "day",
-        label: "Day Chg",
+        label: "Day change",
         defaultDir: "desc",
         sortValue: (v) => v.dayChangePct,
         render: (v) => <SignedPair amount={v.dayChange} pct={v.dayChangePct} />,
       },
       {
         key: "marketValue",
-        label: "Mkt Value",
+        label: "Market value",
         defaultDir: "desc",
         sortValue: (v) => v.marketValue,
         render: (v) => (
@@ -230,7 +230,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
       },
       {
         key: "costBasis",
-        label: "Cost Basis",
+        label: "Cost basis",
         defaultDir: "desc",
         className: "hidden lg:table-cell",
         sortValue: (v) => v.costBasis,
@@ -240,14 +240,14 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
       },
       {
         key: "gain",
-        label: "Unrl Gain",
+        label: "Unrealized",
         defaultDir: "desc",
         sortValue: (v) => gainPct(v),
         render: (v) => <SignedPair amount={v.unrealizedGain} pct={gainPct(v)} />,
       },
       {
         key: "sinceAdded",
-        label: "Since Added",
+        label: "Since added",
         defaultDir: "desc",
         className: "hidden lg:table-cell",
         sortValue: (v) => sinceAddedPct(v),
@@ -390,7 +390,7 @@ function buildColumns(assetClass: AssetClass, fund: FundSlug): Column[] {
     },
     {
       key: "marketValue",
-      label: "Mkt Value",
+      label: "Market value",
       defaultDir: "desc",
       sortValue: (v) => v.marketValue,
       render: (v) => (
@@ -615,7 +615,7 @@ export function HoldingsTable({
             style={{ minWidth: assetClass === "equity" ? 900 : 1000 }}
           >
             <thead>
-              <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted sm:text-xs">
+              <tr className="border-b border-card-border text-left text-xs font-medium text-muted">
                 {columns.map((col) => {
                   const active = sort.key === col.key;
                   const Icon = active
@@ -633,7 +633,7 @@ export function HoldingsTable({
                             : "descending"
                           : undefined
                       }
-                      className={`sticky top-0 bg-sticky py-2.5 font-medium backdrop-blur-xl sm:py-3 ${
+                      className={`sticky top-0 bg-sticky-card py-2.5 font-medium sm:py-3 ${
                         col.first
                           ? "left-0 z-30 px-3 sm:px-6"
                           : "z-20 px-2 sm:px-4"
@@ -644,7 +644,7 @@ export function HoldingsTable({
                       <button
                         type="button"
                         onClick={() => toggleSort(col)}
-                        className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap uppercase tracking-wider transition-colors hover:text-foreground ${
+                        className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap transition-colors hover:text-foreground ${
                           active ? "text-foreground" : ""
                         }`}
                       >
@@ -673,7 +673,7 @@ export function HoldingsTable({
                       key={col.key}
                       className={`py-3 text-xs sm:py-3.5 sm:text-sm ${
                         col.first
-                          ? "sticky left-0 z-10 bg-sticky px-3 backdrop-blur-xl transition-colors group-hover:bg-highlight sm:px-6"
+                          ? "sticky left-0 z-10 bg-sticky-card px-3 transition-colors group-hover:bg-highlight sm:px-6"
                           : "px-2 sm:px-4"
                       } ${
                         col.align === "right" || !col.align

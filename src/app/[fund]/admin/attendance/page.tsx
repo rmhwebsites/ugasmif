@@ -13,7 +13,7 @@ import {
 import { Card, CardHeader } from "@/components/ui/Card";
 import type { Meeting, MeetingAttendance, Membership, Profile } from "@/types/domain";
 
-export const metadata: Metadata = { title: "Attendance Admin" };
+export const metadata: Metadata = { title: "Meetings and attendance" };
 
 type MemberRow = Membership & {
   profiles: Pick<Profile, "full_name"> | null;
@@ -71,7 +71,7 @@ export default async function AttendanceAdminPage({
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Attendance</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Meetings and attendance</h1>
       <Card>
         <CardHeader title="Meetings and attendance" />
         <div className="p-4 sm:p-6">

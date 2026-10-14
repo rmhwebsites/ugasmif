@@ -296,13 +296,13 @@ export function ExecuteTicketForm({
 
       {/* Preview */}
       <div className="rounded-lg bg-highlight p-3">
-        <p className="text-[10px] font-medium uppercase tracking-wider text-muted">
+        <p className="text-xs font-medium text-muted">
           Preview
         </p>
         {preview ? (
           <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted">
+              <p className="text-xs text-muted">
                 Principal
               </p>
               <p className="text-sm font-medium tabular-nums">
@@ -310,7 +310,7 @@ export function ExecuteTicketForm({
               </p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted">
+              <p className="text-xs text-muted">
                 {bond ? "New face" : "New quantity"}
               </p>
               <p
@@ -325,7 +325,7 @@ export function ExecuteTicketForm({
             </div>
             {action === "buy" && (
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted">
+                <p className="text-xs text-muted">
                   New avg cost
                 </p>
                 <p className="text-sm font-medium tabular-nums">
@@ -336,7 +336,7 @@ export function ExecuteTicketForm({
               </div>
             )}
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted">
+              <p className="text-xs text-muted">
                 Cash after
               </p>
               <p

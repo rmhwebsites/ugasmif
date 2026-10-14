@@ -21,7 +21,6 @@ const SHARED_ROUTES = new Set([
   "sectors",
   "pitches",
   "pitches/new",
-  "votes",
   "trades",
   "performance",
   "updates",
@@ -54,9 +53,11 @@ export function sharedSubRoute(pathname: string): string {
 export function FundSwitcher({
   current,
   accessible,
+  className = "",
 }: {
   current: FundSlug;
   accessible: FundSlug[];
+  className?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -70,7 +71,11 @@ export function FundSwitcher({
   }
 
   return (
-    <div className="flex rounded-lg border border-input-border bg-input-bg p-0.5">
+    <div
+      role="group"
+      aria-label="Fund"
+      className={`flex rounded-lg bg-highlight p-0.5 ${className}`}
+    >
       {(Object.keys(FUND_LABELS) as FundSlug[]).map((slug) => {
         const enabled = accessible.includes(slug);
         const active = slug === current;
@@ -85,7 +90,8 @@ export function FundSwitcher({
                 ? `${FUND_LABELS[slug]} ${slug === "athena" ? "Stock" : "Bond"} Fund`
                 : `You are not on the ${FUND_LABELS[slug]} roster.`
             }
-            className={`cursor-pointer rounded-md px-3 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+            aria-pressed={active}
+            className={`flex-1 cursor-pointer rounded-md px-3 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
               active
                 ? "bg-accent text-white"
                 : "text-muted hover:text-foreground"

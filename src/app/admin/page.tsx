@@ -23,7 +23,7 @@ import type {
   Profile,
 } from "@/types/domain";
 
-export const metadata: Metadata = { title: "App Admin" };
+export const metadata: Metadata = { title: "App admin" };
 
 type MembershipRow = Membership & {
   funds: Pick<Fund, "name" | "slug"> | null;
@@ -69,7 +69,7 @@ export default async function AppAdminPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">App Admin</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">App Admin</h1>
 
       <div className="flex flex-wrap gap-2">
         {funds.map((f) => (

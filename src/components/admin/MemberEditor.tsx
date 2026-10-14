@@ -119,7 +119,7 @@ export function MemberEditor({
         <div className="max-h-[70vh] overflow-auto">
           <table className="w-full text-sm" style={{ minWidth: 760 }}>
             <thead>
-              <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
+              <tr className="border-b border-card-border text-left text-xs text-muted">
                 {HEADERS.map((head, i) => (
                   <th
                     key={head.key}
@@ -131,7 +131,7 @@ export function MemberEditor({
                           : "descending"
                         : undefined
                     }
-                    className={`sticky top-0 z-20 bg-sticky py-2.5 font-medium backdrop-blur-xl ${
+                    className={`sticky top-0 z-20 bg-sticky-card py-2.5 font-medium ${
                       i === 0 ? "left-0 z-30 px-4" : "px-3"
                     } ${head.align === "center" ? "text-center" : "text-left"}`}
                   >
@@ -143,7 +143,7 @@ export function MemberEditor({
                     />
                   </th>
                 ))}
-                <th className="sticky top-0 z-20 bg-sticky px-3 py-2.5 text-right font-medium backdrop-blur-xl">
+                <th className="sticky top-0 z-20 bg-sticky-card px-3 py-2.5 text-right font-medium">
                   Account
                 </th>
               </tr>
@@ -156,7 +156,7 @@ export function MemberEditor({
                     busyId === m.id ? "opacity-50" : ""
                   }`}
                 >
-                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 backdrop-blur-xl">
+                  <td className="sticky left-0 z-10 bg-sticky-card px-4 py-2.5">
                     <p className="font-medium">{m.profiles?.full_name ?? "—"}</p>
                     <p className="text-xs text-muted">{m.profiles?.email}</p>
                   </td>

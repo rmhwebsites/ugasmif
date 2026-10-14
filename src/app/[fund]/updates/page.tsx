@@ -1,7 +1,6 @@
 // /[fund]/updates — officer posts with unread highlighting (SPEC 11.2).
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -12,6 +11,8 @@ import {
 } from "@/components/updates/UpdatesList";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { FundUpdate, Profile, UpdateRead } from "@/types/domain";
+import { LinkButton, PageHeader } from "@/components/ui/PageHeader";
+import { Plus } from "lucide-react";
 
 export const metadata: Metadata = { title: "Updates" };
 
@@ -54,25 +55,25 @@ export default async function UpdatesPage({
   const canPost = can(ctx, "post_updates");
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold sm:text-3xl">Updates</h1>
-        {canPost && (
-          <Link
-            href={`/${ctx.fund.slug}/admin/updates`}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
-          >
-            Post an update
-          </Link>
-        )}
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Updates"
+        description="Announcements from the fund's officers."
+        actions={
+          canPost ? (
+            <LinkButton href={`/${ctx.fund.slug}/admin/updates`}>
+              <Plus className="h-4 w-4" /> Post an update
+            </LinkButton>
+          ) : undefined
+        }
+      />
 
       {items.length === 0 ? (
         <EmptyState
           title="No updates yet"
           hint={
             canPost
-              ? "Post the first update from the admin page."
+              ? "Post the first one with the button above."
               : "Officers post announcements here — check back after the next class."
           }
         />

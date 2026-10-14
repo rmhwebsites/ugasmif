@@ -98,8 +98,8 @@ export function UsersTable({
       <div className="glass-card overflow-hidden">
         <div className="max-h-[32rem] overflow-auto">
           <table className="w-full text-sm" style={{ minWidth: 640 }}>
-            <thead className="sticky top-0 bg-sticky backdrop-blur-xl">
-              <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted">
+            <thead className="sticky top-0 bg-sticky-card">
+              <tr className="border-b border-card-border text-left text-xs text-muted">
                 {USER_HEADERS.map((head, i) => (
                   <th
                     key={head.key}
@@ -112,7 +112,7 @@ export function UsersTable({
                         : undefined
                     }
                     className={`py-2.5 font-medium ${
-                      i === 0 ? "sticky left-0 z-10 bg-sticky px-4 backdrop-blur-xl" : "px-3"
+                      i === 0 ? "sticky left-0 z-10 bg-sticky-card px-4" : "px-3"
                     } ${head.align === "center" ? "text-center" : "text-left"}`}
                   >
                     <SortButton
@@ -133,7 +133,7 @@ export function UsersTable({
                     busyId === u.id ? "opacity-50" : ""
                   }`}
                 >
-                  <td className="sticky left-0 z-10 bg-sticky px-4 py-2.5 backdrop-blur-xl">
+                  <td className="sticky left-0 z-10 bg-sticky-card px-4 py-2.5">
                     <p className="font-medium">{u.full_name}</p>
                     <p className="text-xs text-muted">{u.email}</p>
                   </td>

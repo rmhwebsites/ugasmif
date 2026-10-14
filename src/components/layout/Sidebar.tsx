@@ -1,29 +1,35 @@
 "use client";
 
-// Collapsible sidebar (spec 11.4). The fund header always states which hat
-// the user wears: "Arch Bond Fund — Portfolio Manager" (spec Section 10).
+// The fund's whole frame: who you are, which fund you are in, and every place
+// you can go, grouped by what the work is for. The header always states which
+// hat the user wears: "Arch Bond Fund · Portfolio Manager" (spec Section 10).
+//
+// Groups follow how the club runs: the portfolio itself, the research that
+// feeds it (sector teams and their pitches, votes included), and the club
+// around it (meetings, updates, people). Managing the fund sits apart, at the
+// bottom, for the people who do it.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowLeftRight,
   BarChart3,
   Briefcase,
-  CalendarCheck,
+  CalendarDays,
   FileText,
   LayoutDashboard,
-  LineChart,
   LogOut,
   Megaphone,
   PieChart,
-  Settings,
   ShieldCheck,
   Users,
-  Vote,
   Wrench,
   X,
 } from "lucide-react";
 import { SmifLogo } from "@/components/icons/SmifLogo";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { Avatar } from "@/components/ui/Avatar";
+import { FundSwitcher } from "@/components/layout/FundSwitcher";
 import { ThemeSelector } from "@/components/layout/ThemeSelector";
 import { useMobileNav } from "@/components/layout/MobileNav";
 import type { FundSlug } from "@/types/domain";
@@ -31,29 +37,25 @@ import type { FundSlug } from "@/types/domain";
 interface NavItem {
   href: string;
   label: string;
-  icon: keyof typeof ICONS;
+  Icon: typeof LayoutDashboard;
+  /** Small count on the right, e.g. votes still waiting on you. */
+  badge?: number;
+  badgeLabel?: string;
 }
 
-const ICONS = {
-  dashboard: LayoutDashboard,
-  holdings: Briefcase,
-  sectors: PieChart,
-  pitches: FileText,
-  votes: Vote,
-  trades: LineChart,
-  performance: BarChart3,
-  updates: Megaphone,
-  team: Users,
-  attendance: CalendarCheck,
-  admin: Wrench,
-  settings: Settings,
-  shield: ShieldCheck,
-};
+interface NavGroup {
+  label: string | null;
+  items: NavItem[];
+}
 
 export function Sidebar({
   fund,
   fundName,
   headerLine,
+  accessible,
+  userName,
+  avatarUrl,
+  votesWaiting,
   showAdmin,
   showAppAdmin,
 }: {
@@ -61,31 +63,64 @@ export function Sidebar({
   fundName: string;
   /** e.g. "Portfolio Manager" or "Analyst · Healthcare" */
   headerLine: string;
+  accessible: FundSlug[];
+  userName: string;
+  avatarUrl: string | null;
+  /** Open votes this user can cast and has not yet. */
+  votesWaiting: number;
   showAdmin: boolean;
   showAppAdmin: boolean;
 }) {
   const pathname = usePathname();
   const { open, setOpen } = useMobileNav();
 
-  const items: NavItem[] = [
-    { href: `/${fund}`, label: "Dashboard", icon: "dashboard" },
-    { href: `/${fund}/holdings`, label: "Holdings", icon: "holdings" },
-    { href: `/${fund}/sectors`, label: "Sectors", icon: "sectors" },
-    { href: `/${fund}/pitches`, label: "Pitches", icon: "pitches" },
-    { href: `/${fund}/votes`, label: "Votes", icon: "votes" },
-    { href: `/${fund}/trades`, label: "Trades", icon: "trades" },
-    { href: `/${fund}/performance`, label: "Performance", icon: "performance" },
-    { href: `/${fund}/updates`, label: "Updates", icon: "updates" },
-    { href: `/${fund}/team`, label: "Team", icon: "team" },
-    { href: `/${fund}/attendance`, label: "Attendance", icon: "attendance" },
+  const groups: NavGroup[] = [
+    {
+      label: null,
+      items: [{ href: `/${fund}`, label: "Dashboard", Icon: LayoutDashboard }],
+    },
+    {
+      label: "Portfolio",
+      items: [
+        { href: `/${fund}/holdings`, label: "Holdings", Icon: Briefcase },
+        { href: `/${fund}/performance`, label: "Performance", Icon: BarChart3 },
+        { href: `/${fund}/trades`, label: "Trades", Icon: ArrowLeftRight },
+      ],
+    },
+    {
+      label: "Research",
+      items: [
+        {
+          href: `/${fund}/pitches`,
+          label: "Pitches",
+          Icon: FileText,
+          badge: votesWaiting,
+          badgeLabel:
+            votesWaiting === 1
+              ? "1 vote waiting on you"
+              : `${votesWaiting} votes waiting on you`,
+        },
+        { href: `/${fund}/sectors`, label: "Sectors", Icon: PieChart },
+      ],
+    },
+    {
+      label: "Club",
+      items: [
+        { href: `/${fund}/attendance`, label: "Meetings", Icon: CalendarDays },
+        { href: `/${fund}/updates`, label: "Updates", Icon: Megaphone },
+        { href: `/${fund}/team`, label: "Team", Icon: Users },
+      ],
+    },
   ];
 
-  const adminItems: NavItem[] = showAdmin
-    ? [{ href: `/${fund}/admin`, label: "Fund Admin", icon: "admin" }]
-    : [];
-  if (showAppAdmin) {
-    adminItems.push({ href: "/admin", label: "App Admin", icon: "shield" });
+  const manage: NavItem[] = [];
+  if (showAdmin) {
+    manage.push({ href: `/${fund}/admin`, label: "Fund admin", Icon: Wrench });
   }
+  if (showAppAdmin) {
+    manage.push({ href: "/admin", label: "App admin", Icon: ShieldCheck });
+  }
+  if (manage.length > 0) groups.push({ label: "Manage", items: manage });
 
   function isActive(href: string): boolean {
     if (href === `/${fund}`) return pathname === href;
@@ -93,92 +128,104 @@ export function Sidebar({
   }
 
   const nav = (
-    <nav className="flex h-full flex-col">
-      <div className="border-b border-card-border px-4 py-5">
-        <Link href={`/${fund}`} className="flex items-center gap-3">
+    <div className="flex h-full flex-col">
+      <div className="px-4 pt-5 pb-3">
+        <Link
+          href={`/${fund}`}
+          onClick={() => setOpen(false)}
+          className="flex items-center gap-3"
+        >
           <SmifLogo className="h-10 w-10 shrink-0" />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{fundName}</p>
             <p className="truncate text-xs text-accent">{headerLine}</p>
           </div>
         </Link>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2 py-3">
-        {items.map((item) => {
-          const Icon = ICONS[item.icon];
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
-              className={`mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                isActive(item.href)
-                  ? "bg-accent-soft font-medium text-accent"
-                  : "text-muted hover:bg-highlight hover:text-foreground"
-              }`}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {item.label}
-            </Link>
-          );
-        })}
-
-        {adminItems.length > 0 && (
-          <>
-            <p className="mt-4 mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted">
-              Administration
-            </p>
-            {adminItems.map((item) => {
-              const Icon = ICONS[item.icon];
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={`mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                    isActive(item.href)
-                      ? "bg-accent-soft font-medium text-accent"
-                      : "text-muted hover:bg-highlight hover:text-foreground"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </>
+        {accessible.length > 1 && (
+          <FundSwitcher
+            current={fund}
+            accessible={accessible}
+            className="mt-3"
+          />
         )}
       </div>
 
-      <div className="border-t border-card-border px-2 py-3">
-        <Link
-          href={`/${fund}/profile`}
-          onClick={() => setOpen(false)}
-          className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-            isActive(`/${fund}/profile`)
-              ? "bg-accent-soft font-medium text-accent"
-              : "text-muted hover:bg-highlight hover:text-foreground"
-          }`}
-        >
-          <Settings className="h-4 w-4 shrink-0" />
-          Profile
-        </Link>
-        {/* On a phone the header has no room for it, so it lives here. */}
-        <div className="mt-1 lg:hidden">
+      <nav aria-label="Fund" className="flex-1 overflow-y-auto px-2 pb-3">
+        {groups.map((group, gi) => (
+          <div key={group.label ?? gi} className={gi === 0 ? "" : "mt-4"}>
+            {group.label && (
+              <p className="px-3 pb-1 text-xs font-medium text-muted">
+                {group.label}
+              </p>
+            )}
+            <ul>
+              {group.items.map(({ href, label, Icon, badge, badgeLabel }) => {
+                const active = isActive(href);
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      onClick={() => setOpen(false)}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors lg:py-1.5 ${
+                        active
+                          ? "bg-accent-soft font-medium text-accent"
+                          : "text-foreground/80 hover:bg-highlight hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="flex-1">{label}</span>
+                      {badge ? (
+                        <span
+                          title={badgeLabel}
+                          className="rounded-full bg-accent px-1.5 text-xs font-semibold leading-5 text-white tabular-nums"
+                        >
+                          {badge}
+                          <span className="sr-only"> · {badgeLabel}</span>
+                        </span>
+                      ) : null}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
+
+      <div className="bg-highlight px-2 py-3">
+        <div className="flex items-center gap-1">
+          <Link
+            href={`/${fund}/profile`}
+            onClick={() => setOpen(false)}
+            aria-current={isActive(`/${fund}/profile`) ? "page" : undefined}
+            className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors ${
+              isActive(`/${fund}/profile`)
+                ? "bg-accent-soft"
+                : "hover:bg-highlight"
+            }`}
+          >
+            <Avatar src={avatarUrl} size="sm" />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium">
+                {userName}
+              </span>
+              <span className="block text-xs text-muted">Your profile</span>
+            </span>
+          </Link>
           <LogoutButton
             variant="ghost"
-            className="w-full justify-start gap-3 px-3 py-2 font-normal"
+            label="Sign out"
+            className="h-9 w-9 shrink-0 px-0! py-0!"
           >
             <LogOut className="h-4 w-4 shrink-0" />
-            Sign out
           </LogoutButton>
         </div>
         <div className="mt-2 px-1">
           <ThemeSelector />
         </div>
       </div>
-    </nav>
+    </div>
   );
 
   return (

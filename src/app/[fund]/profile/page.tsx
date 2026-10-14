@@ -47,7 +47,7 @@ export default async function ProfilePage({
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold sm:text-3xl">Profile</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Profile</h1>
         <p className="mt-1 text-xs text-muted sm:text-sm">
           How you appear across SMIF Hub, and how it reaches you.
         </p>
@@ -70,7 +70,7 @@ export default async function ProfilePage({
             <CardHeader title="Account" />
             <div className="space-y-4 p-4 sm:p-6">
               <div>
-                <p className="text-[11px] uppercase tracking-wider text-muted">
+                <p className="text-xs font-medium text-muted">
                   Email
                 </p>
                 <p className="mt-1 flex items-center gap-2 text-sm">
@@ -83,7 +83,7 @@ export default async function ProfilePage({
               </div>
 
               <div>
-                <p className="text-[11px] uppercase tracking-wider text-muted">
+                <p className="text-xs font-medium text-muted">
                   Roles this year ({ctx.currentYear.label})
                 </p>
                 {roles.length === 0 &&

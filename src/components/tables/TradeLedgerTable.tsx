@@ -47,7 +47,9 @@ function buildColumns(fund: string): SortableColumn<LedgerRow>[] {
       align: "left",
       sortValue: (t) => t.trade_date ?? "",
       render: (t) => (
-        <span className="tabular-nums">{dateOnly(t.trade_date)}</span>
+        <span className="whitespace-nowrap tabular-nums">
+          {dateOnly(t.trade_date)}
+        </span>
       ),
     },
     {

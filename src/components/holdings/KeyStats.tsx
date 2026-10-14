@@ -30,16 +30,16 @@ export function keyStatItems(stats: KeyStats): KeyStatItem[] {
   const marketCap = num("marketCap");
   return [
     {
-      label: "Market Cap",
+      label: "Market cap",
       value: marketCap === null ? "—" : `$${compact(marketCap)}`,
     },
     { label: "P/E (TTM)", value: formatNumber(num("trailingPE"), 1) },
     { label: "Forward P/E", value: formatNumber(num("forwardPE"), 1) },
-    { label: "Dividend Yield", value: formatPercent(num("dividendYield"), 2) },
+    { label: "Dividend yield", value: formatPercent(num("dividendYield"), 2) },
     { label: "Beta", value: formatNumber(num("beta"), 2) },
     { label: "52W High", value: formatCurrency(num("fiftyTwoWeekHigh")) },
     { label: "52W Low", value: formatCurrency(num("fiftyTwoWeekLow")) },
-    { label: "Avg Volume", value: compact(num("averageVolume")) },
+    { label: "Avg volume", value: compact(num("averageVolume")) },
   ];
 }
 
@@ -57,12 +57,12 @@ export function KeyStatsCard({
   const items = keyStatItems(stats);
   return (
     <Card className="overflow-hidden">
-      <CardHeader title="Key Stats" />
+      <CardHeader title="Key stats" />
       {hasKeyStats(items) ? (
         <div className="grid grid-cols-2 gap-x-4 gap-y-4 p-4 sm:grid-cols-4 sm:p-6">
           {items.map((item) => (
             <div key={item.label}>
-              <p className="text-[11px] uppercase tracking-wider text-muted">
+              <p className="text-xs font-medium text-muted">
                 {item.label}
               </p>
               <p className="mt-0.5 text-sm font-medium tabular-nums sm:text-base">

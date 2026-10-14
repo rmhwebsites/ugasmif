@@ -128,7 +128,7 @@ export function PitchFiles({
                   <span className="min-w-0 flex-1 truncate font-medium">
                     {f.file_name}
                   </span>
-                  <span className="text-[10px] uppercase tracking-wider text-muted">
+                  <span className="text-xs text-muted">
                     {f.kind}
                   </span>
                 </a>

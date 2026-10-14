@@ -36,7 +36,7 @@ export interface SortState {
 }
 
 /** Shared by the header cell and the body cell of the pinned first column. */
-const STICKY_CELL = "sticky left-0 bg-sticky backdrop-blur-xl";
+const STICKY_CELL = "sticky left-0 bg-sticky-card";
 
 /**
  * Sorting for a table whose body this component cannot render — expandable
@@ -91,7 +91,7 @@ export function SortButton({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap uppercase tracking-wider transition-colors hover:text-foreground ${
+      className={`inline-flex cursor-pointer items-center gap-1 whitespace-nowrap transition-colors hover:text-foreground ${
         active ? "text-foreground" : ""
       }`}
     >
@@ -161,7 +161,7 @@ export function SortableTable<T>({
       <table className="w-full" style={minWidth ? { minWidth } : undefined}>
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>
-          <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-wider text-muted sm:text-xs">
+          <tr className="border-b border-card-border text-left text-xs font-medium text-muted">
             {columns.map((col, i) => {
               const active = sort?.key === col.key;
               const alignRight = col.align !== "left";
@@ -176,7 +176,7 @@ export function SortableTable<T>({
                         : "descending"
                       : undefined
                   }
-                  className={`sticky top-0 bg-sticky py-2.5 font-medium backdrop-blur-xl sm:py-3 ${
+                  className={`sticky top-0 bg-sticky-card py-2.5 font-medium sm:py-3 ${
                     i === 0
                       ? `${STICKY_CELL} z-30 px-3 sm:px-6`
                       : "z-20 px-2 sm:px-4"

@@ -77,7 +77,7 @@ export default async function NewPitchPage({
         >
           <ArrowLeft className="h-3.5 w-3.5" /> All pitches
         </Link>
-        <h1 className="mt-1 text-xl font-bold sm:text-2xl">New pitch</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">New pitch</h1>
         <p className="text-xs text-muted sm:text-sm">
           Fill in the basics, create the draft, then attach the deck and model.
           Your sector leader submits it when it&apos;s ready.

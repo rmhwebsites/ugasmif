@@ -109,7 +109,7 @@ export function SectorWeightsTable({
         rowKey={(s) => s.sectorId}
         initialSort={{ key: "weight", dir: "desc" }}
         caption="Sector weights versus benchmark"
-        emptyMessage="No sector data yet. Officers add sectors and set benchmark weights under Fund Admin → Sectors."
+        emptyMessage="No sector data yet. Officers add sectors and set benchmark weights under Fund admin → Sectors."
       />
     );
   }
@@ -120,7 +120,7 @@ export function SectorWeightsTable({
       rowKey={(g) => g.sectorName}
       initialSort={{ key: "gain", dir: "desc" }}
       caption="Unrealized gain by sector"
-      emptyMessage="No sector data yet. Officers add sectors under Fund Admin → Sectors."
+      emptyMessage="No sector data yet. Officers add sectors under Fund admin → Sectors."
     />
   );
 }
@@ -261,7 +261,7 @@ export function SectorAttributionTable({
       caption="Contribution to return by sector"
       footer={
         <tr className="border-t border-card-border">
-          <td className="sticky left-0 z-10 bg-sticky px-3 py-2.5 font-semibold backdrop-blur-xl sm:px-6">
+          <td className="sticky left-0 z-10 bg-sticky-card px-3 py-2.5 font-semibold sm:px-6">
             Total
           </td>
           <td className="px-2 py-2.5 text-right tabular-nums text-muted sm:px-4">
@@ -335,7 +335,7 @@ export function RatingBucketTable({ rows }: { rows: RatingBucketRow[] }) {
       rowKey={(r) => r.bucket}
       initialSort={{ key: "bucket", dir: "asc" }}
       caption="Allocation by rating bucket"
-      emptyMessage="No rated positions yet. Ratings are set per holding under Fund Admin → Holdings."
+      emptyMessage="No rated positions yet. Ratings are set per holding under Fund admin → Holdings."
     />
   );
 }

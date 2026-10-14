@@ -37,7 +37,9 @@ function tradeColumns(isBond: boolean): SortableColumn<Trade>[] {
       label: "Date",
       align: "left",
       sortValue: (t) => t.trade_date ?? "",
-      render: (t) => formatDate(t.trade_date),
+      render: (t) => (
+        <span className="whitespace-nowrap">{formatDate(t.trade_date)}</span>
+      ),
     },
     {
       key: "action",
@@ -135,7 +137,7 @@ const markColumns: SortableColumn<MarkRow>[] = [
   },
   {
     key: "price",
-    label: "Clean Price",
+    label: "Clean price",
     sortValue: (m) => Number(m.clean_price),
     render: (m) => (
       <span className="font-medium tabular-nums">

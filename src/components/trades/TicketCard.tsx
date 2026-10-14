@@ -40,7 +40,7 @@ export function isBondInstrument(instrumentType: string): boolean {
 function estCell(label: string, value: ReactNode) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wider text-muted">{label}</p>
+      <p className="text-xs text-muted">{label}</p>
       <p className="mt-0.5 text-sm font-medium tabular-nums">{value}</p>
     </div>
   );

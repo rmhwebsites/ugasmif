@@ -138,7 +138,7 @@ export function TallyCard({
 
       {voters !== null && voters !== undefined && voters.length > 0 && (
         <div className="mt-4 border-t border-card-border pt-3">
-          <p className="mb-2 text-[11px] uppercase tracking-wider text-muted">
+          <p className="mb-2 text-xs font-medium text-muted">
             Ballots (officers only)
           </p>
           <ul className="space-y-2">

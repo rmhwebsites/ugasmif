@@ -60,7 +60,7 @@ export default async function MemberDetailPage({
         >
           ← Back to members
         </Link>
-        <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
           {profile.full_name}
         </h1>
         <p className="mt-0.5 text-sm text-muted">{profile.email}</p>

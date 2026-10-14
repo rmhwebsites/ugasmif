@@ -42,7 +42,7 @@ export function StatCard({
 }) {
   return (
     <div className="glass-card p-4 sm:p-5">
-      <p className="text-[11px] uppercase tracking-wider text-muted sm:text-xs">
+      <p className="text-sm text-muted">
         {label}
       </p>
       <p className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">
