@@ -1,5 +1,7 @@
 // Skeleton for /[fund]/holdings while valueFund runs (spec 11.4: skeletons,
-// never spinners, on full pages).
+// never spinners, on full pages). Same shape as the page: title, the value
+// chart card (about 22rem tall), the summary line, then the table, so
+// nothing jumps when the real page arrives.
 
 import { Skeleton, TableSkeleton } from "@/components/ui/Skeleton";
 
@@ -10,6 +12,7 @@ export default function HoldingsLoading() {
         <Skeleton className="h-8 w-36" />
         <Skeleton className="h-4 w-40" />
       </div>
+      <Skeleton className="h-[22rem] w-full" />
       <Skeleton className="h-12 w-full" />
       <TableSkeleton rows={10} />
     </div>

@@ -1,7 +1,9 @@
 // /[fund]/holdings — full holdings table (SPEC 11.2). Server component:
 // resolves the fund context, values the fund once via valueFund, renders the
-// summary line (positions, securities value, cash, total) and the sortable,
-// filterable HoldingsTable client component.
+// portfolio value chart (the same card as the dashboard's, so the book's
+// value over time sits right above what it is made of), the summary line
+// (positions, securities value, cash, total) and the sortable, filterable
+// HoldingsTable client component.
 //
 // The summary's figures lead somewhere: the PM's cash figure opens the cash
 // form on Manage holdings, and a stale-price count filters the table to the
@@ -15,6 +17,7 @@ import { getFundContext } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { valueFund } from "@/lib/valuation";
 import { HoldingsTable } from "@/components/holdings/HoldingsTable";
+import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
 import { AlumniNotice } from "@/components/ui/AlumniNotice";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatCurrency, formatDateTime } from "@/lib/format";
@@ -102,6 +105,14 @@ export default async function HoldingsPage({
   return (
     <div className="space-y-6">
       {header}
+
+      <DashboardCharts
+        fund={fund}
+        totalValue={valuation.totalValue}
+        dayChange={valuation.dayChange}
+        dayChangePct={valuation.dayChangePct}
+        benchmarkName={ctx.fund.benchmark_name}
+      />
 
       {/* Summary line */}
       <div className="glass-card flex flex-wrap items-center gap-x-6 gap-y-1.5 px-4 py-3 text-sm sm:px-6">
