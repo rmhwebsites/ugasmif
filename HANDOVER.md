@@ -184,14 +184,16 @@ team's current tilt against it (`ES Targets`).
 
 Two steps:
 
-1. **Workbook to JSON.** A small Python extractor reads that sheet by its
-   headers, not by fixed cells, and writes the positions, the cash and the
-   sector targets. It maps the sheet's sector labels onto Athena's sectors
-   ("Tech" is Technology, "REIT" and "Materials" are REITs & Materials,
-   "Energy" and "Utilities" are Energy & Utilities, "Financials" is the
-   Financial Institutions Group) and fills in company names, since the sheet
-   carries tickers only. It stops if the rows don't add up to the sheet's own
-   `TOTAL`, or if shares times cost doesn't equal each row's total cost.
+1. **Workbook to JSON.**
+   `python3 scripts/extract-athena-book.py <workbook.xlsx> athena.json`
+   (needs `pip install openpyxl`). It reads that sheet by its headers, not by
+   fixed cells, and writes the positions, the cash and the sector targets. It
+   maps the sheet's sector labels onto Athena's sectors ("Tech" is Technology,
+   "REIT" and "Materials" are REITs & Materials, "Energy" and "Utilities" are
+   Energy & Utilities, "Financials" is the Financial Institutions Group) and
+   stops on a label it doesn't know. It also stops if the rows don't add up to
+   the sheet's own `TOTAL`, or if shares times cost doesn't equal a row's total
+   cost.
 
 2. **JSON to database.** `npm run import-athena -- path/to/athena.json`
    prints exactly what would change and writes nothing. Read it, then run it
@@ -201,6 +203,12 @@ Two steps:
    is set to the workbook's `Cash` line. Running the same file twice changes
    nothing the second time.
 
+   The sheet carries tickers only. A ticker the fund already holds keeps the
+   name on its row (fix a name once in Manage holdings and it sticks); a new
+   ticker takes its name and stock-or-ETF from its Yahoo quote, so "Amgen
+   Inc." arrives as "Amgen". A ticker Yahoo doesn't know stops the run, since
+   the app couldn't price it either.
+
 Each sector's target is its S&P weight plus the Equity Strategies tilt, dated
 to the workbook's "Current Date" and recorded with the S&P weight as the
 benchmark. Pass `--no-targets` to load holdings and cash only. Prices are not
@@ -209,10 +217,10 @@ taken from the workbook: equities and ETFs quote live from Yahoo.
 The import adds one "Holdings loaded from the workbook" entry to the fund's
 audit log.
 
-**The positions file and the extractor are not in this repository.** The
-JSON is a real portfolio, and the extractor's name list would publish every
-ticker the fund holds. Keep both on your own machine and pass the file by
-path.
+**The positions file is not in this repository.** It is a real portfolio and
+this repo is public. Keep the workbook and the JSON on your own machine and
+pass the file by path. The extractor holds nothing about what the fund owns,
+which is why it can live here.
 
 ## Loading the semester calendar
 

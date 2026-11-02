@@ -7,8 +7,9 @@
 
 export interface Position {
   symbol: string;
-  name: string;
-  instrument_type: "equity" | "etf";
+  /** Null from the extractor: the import fills it in (see resolveIdentity). */
+  name: string | null;
+  instrument_type: "equity" | "etf" | null;
   /** Athena sector name, already mapped from the workbook's label. */
   sector: string;
   quantity: number;
@@ -123,6 +124,9 @@ export function planImport(
   for (const p of book.positions) {
     const sectorId = sectorIdByName.get(p.sector.toLowerCase());
     if (!sectorId) throw new Error(`no sector named ${p.sector}`);
+    if (!p.name || !p.instrument_type) {
+      throw new Error(`${p.symbol}: name and type must be resolved before planning`);
+    }
     const row: HoldingRow = {
       fund_id: fundId,
       sector_id: sectorId,
@@ -156,4 +160,64 @@ export function planImport(
 
   const close = ordered.filter((h) => h.is_active && !kept.has(h.id));
   return { updates, unchanged, inserts, close };
+}
+
+/**
+ * A company's name as the app shows it: Yahoo's legal name without the
+ * corporate suffix. "Amgen Inc." is "Amgen", "Goldman Sachs Group, Inc. (The)"
+ * is "Goldman Sachs Group", "ASML Holding N.V. - New York Registry Shares"
+ * is "ASML Holding". "Company" stays: "Southern Company" is the name.
+ */
+export function cleanCompanyName(raw: string): string {
+  let name = raw
+    .replace(/\s+-\s+.*$/, "")
+    .replace(/\s*\(The\)\s*$/i, "")
+    .replace(/^The\s+/i, "")
+    .trim();
+  const SUFFIX =
+    /[,\s]+(Inc\.?|Incorporated|Corporation|Corp\.?|plc|PLC|Ltd\.?|Limited|N\.V\.|S\.A\.|AG|SE|L\.P\.|LP)$/;
+  for (let i = 0; i < 3 && SUFFIX.test(name); i++) name = name.replace(SUFFIX, "").trim();
+  return name.replace(/,$/, "") || raw.trim();
+}
+
+export interface QuoteIdentity {
+  name: string | null;
+  /** Yahoo's quoteType: "EQUITY", "ETF", ... */
+  quoteType: string | null;
+}
+
+/**
+ * Fill in each position's name and instrument type. A ticker the fund
+ * already holds keeps the name and type on its row (an officer may have
+ * edited them); a new ticker takes them from its quote. A ticker with
+ * neither is a ticker the app could not price either, so it stops the run.
+ */
+export function resolveIdentity(
+  positions: Position[],
+  existing: ExistingHolding[],
+  quotes: Map<string, QuoteIdentity>
+): Position[] {
+  const held = new Map<string, ExistingHolding>();
+  for (const h of [...existing].sort((a, b) => Number(b.is_active) - Number(a.is_active))) {
+    const t = (h.symbol ?? "").toUpperCase();
+    if (t && !held.has(t)) held.set(t, h);
+  }
+  return positions.map((p) => {
+    const symbol = p.symbol.toUpperCase();
+    const row = held.get(symbol);
+    const quote = quotes.get(symbol);
+    const rowType =
+      row && (row.instrument_type === "equity" || row.instrument_type === "etf")
+        ? row.instrument_type
+        : null;
+    const name = p.name ?? row?.name ?? (quote?.name ? cleanCompanyName(quote.name) : null);
+    const instrument_type =
+      p.instrument_type ??
+      rowType ??
+      (quote?.quoteType ? (quote.quoteType === "ETF" ? "etf" : "equity") : null);
+    if (!name || !instrument_type) {
+      throw new Error(`${symbol}: no quote found to name it; check the ticker`);
+    }
+    return { ...p, symbol, name, instrument_type };
+  });
 }

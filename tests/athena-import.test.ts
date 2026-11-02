@@ -6,7 +6,9 @@
 import { describe, it, expect } from "vitest";
 import {
   checkBook,
+  cleanCompanyName,
   planImport,
+  resolveIdentity,
   type Book,
   type ExistingHolding,
   type Position,
@@ -149,5 +151,56 @@ describe("planImport", () => {
     expect(() =>
       planImport(book([pos("FFF", 1, 1, { sector: "Energy" })]), [], "fund", SECTORS)
     ).toThrow(/no sector named Energy/);
+  });
+});
+
+describe("cleanCompanyName", () => {
+  it("drops the corporate suffix Yahoo carries", () => {
+    expect(cleanCompanyName("Amgen Inc.")).toBe("Amgen");
+    expect(cleanCompanyName("Eaton Corporation, PLC")).toBe("Eaton");
+    expect(cleanCompanyName("Goldman Sachs Group, Inc. (The)")).toBe("Goldman Sachs Group");
+    expect(cleanCompanyName("ASML Holding N.V. - New York Registry Shares")).toBe("ASML Holding");
+    expect(cleanCompanyName("Garmin Ltd.")).toBe("Garmin");
+  });
+
+  it("keeps Company, which is part of the name", () => {
+    expect(cleanCompanyName("Southern Company (The)")).toBe("Southern Company");
+    expect(cleanCompanyName("Coca-Cola Company (The)")).toBe("Coca-Cola Company");
+    expect(cleanCompanyName("The TJX Companies, Inc.")).toBe("TJX Companies");
+  });
+});
+
+describe("resolveIdentity", () => {
+  const unnamed = (symbol: string): Position => pos(symbol, 1, 1, { name: null, instrument_type: null });
+
+  it("keeps the name and type on a row the fund already holds", () => {
+    const [p] = resolveIdentity(
+      [unnamed("aaa")],
+      [held("h-aaa", "AAA", 1, 1, { name: "Officer's name", instrument_type: "etf" })],
+      new Map([["AAA", { name: "Quote Name Inc.", quoteType: "EQUITY" }]])
+    );
+    expect([p.symbol, p.name, p.instrument_type]).toEqual(["AAA", "Officer's name", "etf"]);
+  });
+
+  it("names a new ticker from its quote and reads ETFs off the quote type", () => {
+    const [a, b] = resolveIdentity(
+      [unnamed("NEW"), unnamed("FUND")],
+      [],
+      new Map([
+        ["NEW", { name: "New Company Holdings Inc.", quoteType: "EQUITY" }],
+        ["FUND", { name: "Some Sector ETF", quoteType: "ETF" }],
+      ])
+    );
+    expect([a.name, a.instrument_type]).toEqual(["New Company Holdings", "equity"]);
+    expect([b.name, b.instrument_type]).toEqual(["Some Sector ETF", "etf"]);
+  });
+
+  it("uses a name the extractor already gave", () => {
+    const [p] = resolveIdentity([pos("AAA", 1, 1, { name: "Given" })], [], new Map());
+    expect(p.name).toBe("Given");
+  });
+
+  it("stops on a ticker nothing can name", () => {
+    expect(() => resolveIdentity([unnamed("ZZZZ")], [], new Map())).toThrow(/ZZZZ/);
   });
 });

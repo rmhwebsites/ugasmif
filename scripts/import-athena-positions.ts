@@ -6,10 +6,12 @@
  *   ... --apply --no-targets                                  # holdings and cash only
  *
  * The PM keeps the book in a FactSet-linked workbook ('Holdings Update'). A
- * small extractor turns that sheet into the JSON this script reads: every
- * position (ticker, sector, buy date, cost per share, shares), the cash line,
- * and the sector table beside it (S&P weight and the Equity Strategies
- * team's tilt for each sector). See HANDOVER.md.
+ * small extractor (scripts/extract-athena-book.py) turns that sheet into the
+ * JSON this script reads: every position (ticker, sector, buy date, cost per
+ * share, shares), the cash line, and the sector table beside it (S&P weight
+ * and the Equity Strategies team's tilt for each sector). The sheet carries
+ * tickers only, so a ticker the fund already holds keeps its row's name and
+ * type, and a new one takes them from its Yahoo quote. See HANDOVER.md.
  *
  * The JSON is NOT in the repo. It is a real portfolio and this repository is
  * public, so it stays on the operator's machine and is passed in by path.
@@ -27,7 +29,16 @@
 import { readFileSync } from "node:fs";
 import { config as loadEnv } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { checkBook, money, planImport, type Book, type ExistingHolding } from "./athena-book";
+import YahooFinance from "yahoo-finance2";
+import {
+  checkBook,
+  money,
+  planImport,
+  resolveIdentity,
+  type Book,
+  type ExistingHolding,
+  type QuoteIdentity,
+} from "./athena-book";
 
 loadEnv({ path: ".env.local", quiet: true });
 
@@ -87,6 +98,29 @@ async function main() {
     .eq("fund_id", fund.id);
   if (currentError) throw currentError;
   const existing = (current ?? []) as ExistingHolding[];
+
+  // Names and types for tickers the fund doesn't hold yet come from Yahoo.
+  const held = new Set(existing.map((h) => (h.symbol ?? "").toUpperCase()));
+  const lookup = book.positions
+    .filter((p) => (!p.name || !p.instrument_type) && !held.has(p.symbol.toUpperCase()))
+    .map((p) => p.symbol.toUpperCase());
+  const quotes = new Map<string, QuoteIdentity>();
+  if (lookup.length > 0) {
+    const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+    const found = (await yf.quote(lookup, {}, { validateResult: false })) as unknown as {
+      symbol: string;
+      longName?: string;
+      shortName?: string;
+      quoteType?: string;
+    }[];
+    for (const q of found) {
+      quotes.set(q.symbol.toUpperCase(), {
+        name: q.longName ?? q.shortName ?? null,
+        quoteType: q.quoteType ?? null,
+      });
+    }
+  }
+  book.positions = resolveIdentity(book.positions, existing, quotes);
 
   const plan = planImport(book, existing, fund.id, sectorId);
 
