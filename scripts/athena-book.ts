@@ -29,12 +29,22 @@ export interface SectorTarget {
   target_weight_pct: number;
 }
 
+/** One month-end from the workbook's 'Tracking Error' sheet. */
+export interface HistoryPoint {
+  date: string;
+  total_value: number;
+  /** The sheet's own S&P level. Not used: it drifts from April 2026 on, so
+   *  closes come from Yahoo like every other snapshot's. */
+  benchmark_level: number | null;
+}
+
 export interface Book {
   as_of: string;
   cash: number;
   sheet_total: number;
   positions: Position[];
   sector_targets: SectorTarget[];
+  history?: HistoryPoint[];
 }
 
 /** A holdings row as the import reads it from the database. */
@@ -219,5 +229,129 @@ export function resolveIdentity(
       throw new Error(`${symbol}: no quote found to name it; check the ticker`);
     }
     return { ...p, symbol, name, instrument_type };
+  });
+}
+
+// ── Going live: demo records and history (scripts/athena-go-live.ts) ───────
+
+export interface DemoTables {
+  pitches: { id: string; author_id: string; title: string }[];
+  tickets: { id: string; created_by: string; pitch_id: string | null }[];
+  trades: {
+    id: string;
+    executed_by: string;
+    ticket_id: string | null;
+    notes: string | null;
+  }[];
+  cashMovements: { id: string; recorded_by: string; holding_id: string | null }[];
+  holdings: { id: string; symbol: string | null; name: string; is_active: boolean }[];
+  /** Holding ids other tables still point at outside the four above (bond marks). */
+  otherHoldingRefs: string[];
+  /** For each pitch, ticket, trade and cash movement: the holding it names. */
+  holdingRefs: { table: "pitches" | "tickets" | "trades" | "cashMovements"; id: string; holding_id: string | null }[];
+}
+
+export interface DemoPlan {
+  pitches: string[];
+  tickets: string[];
+  trades: string[];
+  cashMovements: string[];
+  /** Closed holdings nothing points at once the demo records are gone. */
+  holdings: string[];
+  /** Records that don't look like demo data, left in place and listed. */
+  kept: { table: string; id: string; label: string }[];
+}
+
+/**
+ * Which records are the seed's demo data. A record is demo when a demo
+ * account (an @example.com address) made it, when the seed marked it
+ * ("Seed: ..." on a trade), or when it hangs off a demo pitch or ticket.
+ * Everything else is kept and reported, since the live site may already have
+ * real activity in it.
+ */
+export function planDemoCleanup(t: DemoTables, demoProfileIds: Set<string>): DemoPlan {
+  const pitches = t.pitches.filter((p) => demoProfileIds.has(p.author_id)).map((p) => p.id);
+  const demoPitch = new Set(pitches);
+  const tickets = t.tickets
+    .filter((k) => demoProfileIds.has(k.created_by) || (k.pitch_id && demoPitch.has(k.pitch_id)))
+    .map((k) => k.id);
+  const demoTicket = new Set(tickets);
+  const trades = t.trades
+    .filter(
+      (r) =>
+        demoProfileIds.has(r.executed_by) ||
+        (r.notes ?? "").startsWith("Seed:") ||
+        (r.ticket_id !== null && demoTicket.has(r.ticket_id))
+    )
+    .map((r) => r.id);
+  const cashMovements = t.cashMovements
+    .filter((c) => demoProfileIds.has(c.recorded_by))
+    .map((c) => c.id);
+
+  const gone = new Set([...pitches, ...tickets, ...trades, ...cashMovements]);
+  const stillReferenced = new Set(t.otherHoldingRefs);
+  for (const r of t.holdingRefs) {
+    if (r.holding_id && !gone.has(r.id)) stillReferenced.add(r.holding_id);
+  }
+  const keptTickets = t.tickets.filter((k) => !demoTicket.has(k.id));
+  const holdings = t.holdings
+    .filter((h) => !h.is_active && !stillReferenced.has(h.id))
+    .map((h) => h.id);
+
+  const kept = [
+    ...t.pitches.filter((p) => !demoPitch.has(p.id)).map((p) => ({ table: "pitches", id: p.id, label: p.title })),
+    ...keptTickets.map((k) => ({ table: "trade_tickets", id: k.id, label: "ticket" })),
+    ...t.trades
+      .filter((r) => !trades.includes(r.id))
+      .map((r) => ({ table: "trades", id: r.id, label: r.notes ?? "trade" })),
+    ...t.cashMovements
+      .filter((c) => !cashMovements.includes(c.id))
+      .map((c) => ({ table: "cash_movements", id: c.id, label: "cash movement" })),
+  ];
+  return { pitches, tickets, trades, cashMovements, holdings, kept };
+}
+
+export interface SnapshotRow {
+  fund_id: string;
+  snapshot_date: string;
+  market_value: number;
+  cash: number;
+  total_value: number;
+  benchmark_symbol: string;
+  benchmark_close: number | null;
+  benchmark_adj_close: number | null;
+  detail: { imported: true; source: string };
+}
+
+/**
+ * The workbook's month-ends as fund snapshots, shaped the way the app's own
+ * history import writes them: the whole value as market value (the sheet has
+ * no cash split for past months), the benchmark's close for that date, and
+ * the `imported` marker that tells them apart from nightly snapshots.
+ */
+export function historySnapshots(
+  fundId: string,
+  benchmarkSymbol: string,
+  history: HistoryPoint[],
+  benchByDate: Map<string, { close: number; adj: number | null }>
+): SnapshotRow[] {
+  const dates = history.map((h) => h.date);
+  if (dates.some((d, i) => i > 0 && d <= dates[i - 1])) {
+    throw new Error("history dates must be in order with no repeats");
+  }
+  return history.map((h) => {
+    if (!(h.total_value > 0)) throw new Error(`${h.date}: no portfolio value`);
+    const bench = benchByDate.get(h.date) ?? null;
+    return {
+      fund_id: fundId,
+      snapshot_date: h.date,
+      market_value: h.total_value,
+      cash: 0,
+      total_value: h.total_value,
+      benchmark_symbol: benchmarkSymbol,
+      benchmark_close: bench?.close ?? null,
+      benchmark_adj_close: bench?.adj ?? null,
+      detail: { imported: true, source: "FactSet holdings workbook, 'Tracking Error'" },
+    };
   });
 }

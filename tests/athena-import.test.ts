@@ -7,8 +7,11 @@ import { describe, it, expect } from "vitest";
 import {
   checkBook,
   cleanCompanyName,
+  historySnapshots,
+  planDemoCleanup,
   planImport,
   resolveIdentity,
+  type DemoTables,
   type Book,
   type ExistingHolding,
   type Position,
@@ -202,5 +205,103 @@ describe("resolveIdentity", () => {
 
   it("stops on a ticker nothing can name", () => {
     expect(() => resolveIdentity([unnamed("ZZZZ")], [], new Map())).toThrow(/ZZZZ/);
+  });
+});
+
+describe("planDemoCleanup", () => {
+  const DEMO = new Set(["demo-analyst", "demo-pm"]);
+  const tables = (over: Partial<DemoTables> = {}): DemoTables => ({
+    pitches: [
+      { id: "p-demo", author_id: "demo-analyst", title: "Demo pitch" },
+      { id: "p-real", author_id: "real-member", title: "A member's real pitch" },
+    ],
+    tickets: [{ id: "k-demo", created_by: "demo-analyst", pitch_id: "p-demo" }],
+    trades: [
+      // Seeded under a real admin account: the note is what marks it.
+      { id: "t-seed", executed_by: "real-admin", ticket_id: null, notes: "Seed: Q3 trim" },
+      { id: "t-ticket", executed_by: "real-admin", ticket_id: "k-demo", notes: null },
+      { id: "t-real", executed_by: "real-admin", ticket_id: null, notes: "Bought on the 4th" },
+    ],
+    cashMovements: [
+      { id: "c-demo", recorded_by: "demo-pm", holding_id: null },
+      { id: "c-real", recorded_by: "real-admin", holding_id: null },
+    ],
+    holdings: [
+      { id: "h-placeholder", symbol: "ZZZ", name: "Placeholder", is_active: false },
+      { id: "h-closed-real", symbol: "YYY", name: "Sold for real", is_active: false },
+      { id: "h-live", symbol: "AAA", name: "Held", is_active: true },
+    ],
+    otherHoldingRefs: [],
+    holdingRefs: [
+      { table: "trades", id: "t-seed", holding_id: "h-placeholder" },
+      { table: "trades", id: "t-real", holding_id: "h-closed-real" },
+    ],
+    ...over,
+  });
+
+  it("removes demo pitches, their tickets and trades, seeded trades and demo cash", () => {
+    const plan = planDemoCleanup(tables(), DEMO);
+    expect(plan.pitches).toEqual(["p-demo"]);
+    expect(plan.tickets).toEqual(["k-demo"]);
+    expect(plan.trades.sort()).toEqual(["t-seed", "t-ticket"]);
+    expect(plan.cashMovements).toEqual(["c-demo"]);
+  });
+
+  it("keeps and reports anything that isn't demo", () => {
+    const plan = planDemoCleanup(tables(), DEMO);
+    expect(plan.kept.map((k) => k.id).sort()).toEqual(["c-real", "p-real", "t-real"]);
+  });
+
+  it("deletes a closed holding only once nothing real points at it", () => {
+    const plan = planDemoCleanup(tables(), DEMO);
+    // The placeholder's only trade was seed data; the real sale keeps its holding.
+    expect(plan.holdings).toEqual(["h-placeholder"]);
+  });
+
+  it("never deletes an active holding or one with bond marks", () => {
+    const plan = planDemoCleanup(tables({ otherHoldingRefs: ["h-placeholder"] }), DEMO);
+    expect(plan.holdings).toEqual([]);
+  });
+
+  it("treats a ticket on a demo pitch as demo, whoever opened it", () => {
+    const plan = planDemoCleanup(
+      tables({ tickets: [{ id: "k-on-demo", created_by: "real-admin", pitch_id: "p-demo" }] }),
+      DEMO
+    );
+    expect(plan.tickets).toEqual(["k-on-demo"]);
+  });
+});
+
+describe("historySnapshots", () => {
+  const history = [
+    { date: "2026-03-31", total_value: 4_000_000, benchmark_level: 6500 },
+    { date: "2026-04-30", total_value: 4_400_000, benchmark_level: 6500 },
+  ];
+
+  it("writes month-ends the way the app's history import does", () => {
+    const rows = historySnapshots(
+      "fund",
+      "^GSPC",
+      history,
+      new Map([["2026-03-31", { close: 6528.5, adj: 6528.5 }]])
+    );
+    expect(rows[0]).toMatchObject({
+      snapshot_date: "2026-03-31",
+      total_value: 4_000_000,
+      market_value: 4_000_000,
+      cash: 0,
+      benchmark_symbol: "^GSPC",
+      benchmark_close: 6528.5,
+      detail: { imported: true },
+    });
+    // No Yahoo bar for that date: the fund value still goes in, unbenchmarked.
+    expect(rows[1].benchmark_close).toBeNull();
+  });
+
+  it("refuses dates out of order and months with no value", () => {
+    expect(() => historySnapshots("f", "^GSPC", [...history].reverse(), new Map())).toThrow(/order/);
+    expect(() =>
+      historySnapshots("f", "^GSPC", [{ date: "2026-03-31", total_value: 0, benchmark_level: null }], new Map())
+    ).toThrow(/no portfolio value/);
   });
 });

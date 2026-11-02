@@ -16,6 +16,7 @@
     "demo-logins": "tsx scripts/demo-logins.ts",
     "import-arch": "tsx scripts/import-arch-positions.ts",
     "import-athena": "tsx scripts/import-athena-positions.ts",
+    "athena-go-live": "tsx scripts/athena-go-live.ts",
     "import-meetings": "tsx scripts/import-meetings.ts",
     "export-roster": "tsx scripts/export-roster.ts",
     "migrate": "node scripts/apply-migrations.mjs",

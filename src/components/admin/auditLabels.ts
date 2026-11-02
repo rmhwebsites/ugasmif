@@ -19,6 +19,7 @@ export const AUDIT_ACTION_GROUPS: {
       { code: "mark.csv_upload", label: "Bond marks uploaded" },
       { code: "cash.movement", label: "Cash movement" },
       { code: "snapshots.import", label: "Performance history imported" },
+      { code: "demo.clear", label: "Demo records cleared" },
     ],
   },
   {

@@ -222,6 +222,36 @@ this repo is public. Keep the workbook and the JSON on your own machine and
 pass the file by path. The extractor holds nothing about what the fund owns,
 which is why it can live here.
 
+### Going live (once)
+
+The first time the real book goes in, two more things have to go: the seed's
+demo pitches, tickets, trades and cash movements, and the made-up performance
+history. After the import above has run with `--apply`, from the same JSON:
+
+```
+npm run athena-go-live -- path/to/athena.json            # preview
+npm run athena-go-live -- path/to/athena.json --apply
+```
+
+It stops if the real book isn't loaded yet. Otherwise it removes:
+
+- pitches by a demo account (an `@example.com` address), with their votes,
+  files (from storage too) and tickets
+- tickets and cash movements a demo account made
+- trades a demo account made, trades the seed marked `Seed: ...`, and trades
+  from a demo ticket
+- the closed placeholder holdings, once nothing points at them
+
+Anything else is left in place and listed, in case real members have already
+used the site. Then it replaces every Athena snapshot with the month-ends on
+the workbook's `Tracking Error` sheet, taking each date's S&P close from
+Yahoo the way the app's own history import does. The sheet's own `Benchmark
+Level` column is ignored: from April 2026 on it drifts as much as 9% from the
+real index, which also skews the sheet's tracking-error figures.
+
+This is a one-time step. Snapshots are otherwise a permanent record, and
+running it again later would delete the nightly snapshots written since.
+
 ## Loading the semester calendar
 
 The PM keeps the class schedule in a spreadsheet, one row per week: a session

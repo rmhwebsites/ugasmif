@@ -11,6 +11,10 @@ Current Price / Current Value) down to its TOTAL row, the Cash line, and the
 sector table beside it (Sector / S&P Weight / ES Targets). Stops if the
 numbers don't reconcile with the sheet's own totals.
 
+Also reads the monthly portfolio values on the 'Tracking Error' sheet (Date /
+Portfolio Value / Benchmark Level), which scripts/athena-go-live.ts loads
+once as the fund's performance history.
+
 The sheet carries tickers only, so names and stock-or-ETF are left for the
 import to fill in from the fund's existing rows or the ticker's quote. That
 also keeps this file free of anything about what the fund holds: the output
@@ -150,6 +154,28 @@ def main(path, out):
                 "target_weight_pct": round((bench + tilt) * 100, 3),
             }
 
+    history = []
+    if "Tracking Error" in wb.sheetnames:
+        te = [list(r) for r in wb["Tracking Error"].iter_rows(min_row=1, max_row=400, values_only=True)]
+        h_i = next((i for i, r in enumerate(te) if "Date" in r and "Portfolio Value" in r), None)
+        if h_i is not None:
+            d_c, v_c = te[h_i].index("Date"), te[h_i].index("Portfolio Value")
+            b_c = te[h_i].index("Benchmark Level") if "Benchmark Level" in te[h_i] else None
+            for r in te[h_i + 1:]:
+                d, v = day(r[d_c]), num(r[v_c])
+                if not d or v is None:
+                    if history:
+                        break  # the table ends at its first blank row
+                    continue
+                history.append({
+                    "date": d,
+                    "total_value": v,
+                    "benchmark_level": num(r[b_c]) if b_c is not None else None,
+                })
+    dates = [h["date"] for h in history]
+    if dates != sorted(set(dates)):
+        raise SystemExit("'Tracking Error' dates are out of order or repeated")
+
     with open(out, "w") as f:
         json.dump({
             "source": "FactSet SMIF holdings workbook, 'Holdings Update'",
@@ -158,12 +184,14 @@ def main(path, out):
             "sheet_total": sheet_total,
             "positions": positions,
             "sector_targets": list(targets.values()),
+            "history": history,
         }, f, indent=1)
 
     cost_basis = sum(p["quantity"] * p["avg_cost"] for p in positions)
+    span = f" ({history[0]['date']} to {history[-1]['date']})" if history else ""
     print(f"as of {as_of}: {len(positions)} positions, cash {cash:,.2f}, "
           f"total {value:,.2f} (sheet {sheet_total:,.2f}), cost basis {cost_basis:,.2f}, "
-          f"{len(targets)} sector targets -> {out}")
+          f"{len(targets)} sector targets, {len(history)} months of history{span} -> {out}")
 
 
 if __name__ == "__main__":
