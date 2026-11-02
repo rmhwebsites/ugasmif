@@ -114,11 +114,46 @@ To apply pending migrations, whichever is easiest:
   It tracks what it has applied, so re-running is safe.
 
 To check what is applied, look for something the migration added. For example
-`select onboarded_at from profiles limit 1` errors if `0003` has not run.
+`select onboarded_at from profiles limit 1` errors if `0003` has not run, and
+`select votes_abstain from pitches limit 1` errors if `0006` has not.
+
+`0006` (ballot options) has to be applied before the code that uses it is
+deployed. It is safe to apply first: the app as it stood before keeps working
+against it.
+
+`supabase/tests/run.sh` runs the access-rule suite and the ballot suite
+against a throwaway local Postgres. The ballot suite upgrades through `0006`
+with a vote already open, the way production did, and stops at the first
+wrong answer.
 
 `npm run gen-types` regenerates `src/types/database.ts` from the live schema.
 It needs the Supabase CLI. `src/types/domain.ts` is hand written and is what
 the app code actually imports, so regenerating types is optional.
+
+## Votes with alternative allocations
+
+Every pitch vote opens with two options, "Yes, as pitched" (at the amount
+on the pitch) and "No", and any member can abstain. When the class lands on something else, say half the size, an
+officer or the app admin adds it: on the pitch page, **Vote → Edit options →
+Add an alternative allocation**, give it an amount, save. That works before
+voting opens and while it's open; the Manage pitches page links there too.
+
+- The pitch passes when all the yes options together reach the threshold
+  share of yes plus no. Abstentions count for neither side but do count
+  toward turnout for the quorum.
+- The yes option with the most votes is the allocation that passed, and its
+  amount goes on the trade ticket. A tie goes to the one listed first, which
+  is the pitch as written.
+- Rewording an option keeps its votes. Changing its amount or removing it
+  clears the votes cast for it, and those members are asked to vote again.
+  The form says how many before you save, and the audit log records it as
+  "Ballot options changed".
+- Once the vote closes, the ballot is fixed.
+
+When a vote opens, every eligible member of that fund gets the ballot as a
+pop-up on whatever page they're on, as well as the email. Athena members see
+Athena votes and Arch members see Arch ones. "Later" puts it off until they
+close the tab; the badge on Pitches keeps counting it.
 
 ## Loading the Arch book from the PM workbook
 
@@ -336,10 +371,14 @@ or when you are rebuilding into a new project.
 
    `funds`, `academic_years`, `profiles`, `sectors`, `memberships`,
    `holdings`, `bond_marks`, `treasury_curve`, `fund_snapshots`,
-   `sector_targets`, `pitches`, `pitch_files`, `votes`, `trade_tickets`,
-   `trades`, `cash_movements`, `meetings`, `meeting_attendance`,
-   `fund_updates`, `update_reads`, `roster_imports`, `backup_runs`,
-   `price_snapshots`, `audit_log`.
+   `sector_targets`, `pitches`, `pitch_files`, `pitch_vote_options`,
+   `votes`, `trade_tickets`, `trades`, `cash_movements`, `meetings`,
+   `meeting_attendance`, `fund_updates`, `update_reads`, `roster_imports`,
+   `backup_runs`, `price_snapshots`, `audit_log`.
+
+   `pitches.winning_option_id` points at `pitch_vote_options`, which points
+   back at `pitches`, so load pitches with that column empty, then the
+   options, then set it from the file.
 
    Insert with the service role key (it bypasses row level security) or from
    the SQL editor. Ids in the file are the original ones, so relationships come

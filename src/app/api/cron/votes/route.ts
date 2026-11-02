@@ -10,23 +10,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { sendEmail, sendToFund } from "@/lib/emails/send";
 import { easternDateString, formatDateTime, formatPercent } from "@/lib/format";
 import { openPitchVote } from "@/app/api/[fund]/pitches/[id]/open-vote/route";
-import type { AcademicYear, Fund, Pitch } from "@/types/domain";
+import { resultSummary, tallyText, type CloseResult } from "@/lib/ballot";
+import type { AcademicYear, Fund, Pitch, VoteOption } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-/** Shape of the close_pitch_vote RPC's jsonb result. */
-interface CloseResult {
-  status: string;
-  result_pct: number | null;
-  votes_yes: number;
-  votes_no: number;
-  eligible_voters?: number | null;
-  already_closed?: boolean;
-  /** The rule this vote was judged under, frozen on the pitch at close. */
-  threshold_pct?: number | null;
-  quorum_pct?: number | null;
-}
 
 interface EligibleVoterRow {
   user_id: string;
@@ -161,6 +150,15 @@ export async function GET(request: NextRequest) {
         const pct = formatPercent(
           result.result_pct === null ? null : Number(result.result_pct)
         );
+        const { data: optionRows } = await service
+          .from("pitch_vote_options")
+          .select("*")
+          .eq("pitch_id", pitch.id);
+        const summary = resultSummary(
+          result,
+          (optionRows ?? []) as VoteOption[],
+          pitch.proposed_amount === null ? null : Number(pitch.proposed_amount)
+        );
 
         // Result email to the whole fund — always sent (spec Section 16).
         await sendToFund(service, fund.id, {
@@ -169,7 +167,7 @@ export async function GET(request: NextRequest) {
             ? `${pitch.title} passed`
             : `${pitch.title} did not pass`,
           bodyLines: [
-            `The vote closed with ${result.votes_yes} yes / ${result.votes_no} no (${pct} yes).`,
+            ...summary,
             passed
               ? pitch.action === "rebalance"
                 ? "The rebalance passed. An officer will apply the new sector targets from the admin page."
@@ -191,7 +189,8 @@ export async function GET(request: NextRequest) {
             subject: `Ticket ready: ${pitch.title}`,
             heading: "A trade ticket is ready",
             bodyLines: [
-              `${pitch.title} passed at ${pct} (${result.votes_yes} yes / ${result.votes_no} no).`,
+              `${pitch.title} passed at ${pct} (${tallyText(result)}).`,
+              ...summary.slice(1),
               "A pending ticket was created from the pitch. Record the execution once the trade is placed.",
             ],
             ctaLabel: "Open pending tickets",

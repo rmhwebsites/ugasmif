@@ -29,6 +29,7 @@ export const AUDIT_ACTION_GROUPS: {
       { code: "pitch.update", label: "Pitch edited" },
       { code: "pitch.submit", label: "Pitch submitted" },
       { code: "pitch.schedule", label: "Pitch scheduled" },
+      { code: "pitch.ballot", label: "Ballot options changed" },
       { code: "pitch.open_vote", label: "Vote opened" },
       { code: "pitch.close_vote", label: "Vote closed" },
       { code: "pitch.remind", label: "Vote reminder sent" },
