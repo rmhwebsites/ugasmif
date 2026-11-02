@@ -9,6 +9,7 @@ import Link from "next/link";
 import {
   CalendarClock,
   CheckCircle2,
+  MinusCircle,
   ChevronRight,
   Send,
   Vote,
@@ -108,7 +109,11 @@ export function PitchCard({
             {closed && pitch.closed_at
               ? ` · closed ${formatDate(pitch.closed_at)}`
               : ` · ${formatDate(pitch.created_at)}`}
-            {closed && myVote ? ` · you voted ${myVote}` : ""}
+            {closed && myVote
+              ? myVote === "abstain"
+                ? " · you abstained"
+                : ` · you voted ${myVote}`
+              : ""}
           </p>
         </div>
 
@@ -132,6 +137,11 @@ export function PitchCard({
               {myVote === "no" && (
                 <Badge tone="loss">
                   <XCircle className="h-3 w-3" /> You voted no
+                </Badge>
+              )}
+              {myVote === "abstain" && (
+                <Badge tone="neutral">
+                  <MinusCircle className="h-3 w-3" /> You abstained
                 </Badge>
               )}
               {canVote && (
