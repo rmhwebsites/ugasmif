@@ -173,6 +173,47 @@ guess:
   carry a negative quantity. They price and total correctly, and show a
   negative weight, which is what a short is.
 
+## Loading the Athena book from the FactSet workbook
+
+The Athena PM keeps the equity book in a FactSet-linked workbook
+(`FactSet_SMIF_Holdings_Live_<date>.xlsx`). Its `Holdings Update` sheet is the
+book of record: one row per position with sector, ticker, buy date, cost per
+share and shares, a `Cash` line above them and a `TOTAL` row below. Beside it
+sits the sector table: each sector's S&P weight and the Equity Strategies
+team's current tilt against it (`ES Targets`).
+
+Two steps:
+
+1. **Workbook to JSON.** A small Python extractor reads that sheet by its
+   headers, not by fixed cells, and writes the positions, the cash and the
+   sector targets. It maps the sheet's sector labels onto Athena's sectors
+   ("Tech" is Technology, "REIT" and "Materials" are REITs & Materials,
+   "Energy" and "Utilities" are Energy & Utilities, "Financials" is the
+   Financial Institutions Group) and fills in company names, since the sheet
+   carries tickers only. It stops if the rows don't add up to the sheet's own
+   `TOTAL`, or if shares times cost doesn't equal each row's total cost.
+
+2. **JSON to database.** `npm run import-athena -- path/to/athena.json`
+   prints exactly what would change and writes nothing. Read it, then run it
+   again with `--apply`. Positions are matched on ticker and updated in place,
+   so trades, tickets and pitches that point at a holding keep pointing at it.
+   Anything the workbook doesn't list is closed, not deleted. The fund's cash
+   is set to the workbook's `Cash` line. Running the same file twice changes
+   nothing the second time.
+
+Each sector's target is its S&P weight plus the Equity Strategies tilt, dated
+to the workbook's "Current Date" and recorded with the S&P weight as the
+benchmark. Pass `--no-targets` to load holdings and cash only. Prices are not
+taken from the workbook: equities and ETFs quote live from Yahoo.
+
+The import adds one "Holdings loaded from the workbook" entry to the fund's
+audit log.
+
+**The positions file and the extractor are not in this repository.** The
+JSON is a real portfolio, and the extractor's name list would publish every
+ticker the fund holds. Keep both on your own machine and pass the file by
+path.
+
 ## Loading the semester calendar
 
 The PM keeps the class schedule in a spreadsheet, one row per week: a session

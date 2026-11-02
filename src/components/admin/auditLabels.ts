@@ -14,6 +14,7 @@ export const AUDIT_ACTION_GROUPS: {
       { code: "ticket.create", label: "Ticket created" },
       { code: "ticket.cancel", label: "Ticket cancelled" },
       { code: "holding.create", label: "Holding added" },
+      { code: "holdings.import", label: "Holdings loaded from the workbook" },
       { code: "mark.create", label: "Bond mark entered" },
       { code: "mark.csv_upload", label: "Bond marks uploaded" },
       { code: "cash.movement", label: "Cash movement" },
