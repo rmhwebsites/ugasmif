@@ -107,6 +107,8 @@ export interface Profile {
   is_faculty_advisor: boolean;
   must_change_password: boolean;
   avatar_url: string | null;
+  /** Public LinkedIn profile link (migration 0007); shown on the alumni page. */
+  linkedin_url?: string | null;
   email_prefs?: { mute_updates?: boolean; mute_reminders?: boolean } | null;
   created_at: string;
   updated_at: string;

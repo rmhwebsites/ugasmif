@@ -75,6 +75,7 @@ export default async function ProfilePage({
             initial={{
               full_name: ctx.profile.full_name,
               avatar_url: ctx.profile.avatar_url,
+              linkedin_url: ctx.profile.linkedin_url ?? null,
               email_prefs: ctx.profile.email_prefs ?? {},
             }}
           />

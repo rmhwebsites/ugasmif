@@ -115,16 +115,17 @@ To apply pending migrations, whichever is easiest:
 
 To check what is applied, look for something the migration added. For example
 `select onboarded_at from profiles limit 1` errors if `0003` has not run, and
-`select votes_abstain from pitches limit 1` errors if `0006` has not.
+`select votes_abstain from pitches limit 1` errors if `0006` has not, and
+`select linkedin_url from profiles limit 1` errors if `0007` has not.
 
-`0006` (ballot options) has to be applied before the code that uses it is
-deployed. It is safe to apply first: the app as it stood before keeps working
-against it.
+`0006` (ballot options) and `0007` (alumni page) have to be applied before
+the code that uses them is deployed. Both are safe to apply first: the app as
+it stood before keeps working against them.
 
-`supabase/tests/run.sh` runs the access-rule suite and the ballot suite
-against a throwaway local Postgres. The ballot suite upgrades through `0006`
-with a vote already open, the way production did, and stops at the first
-wrong answer.
+`supabase/tests/run.sh` runs the access-rule suite, the ballot suite and the
+alumni suite against a throwaway local Postgres. The ballot suite upgrades
+through `0006` with a vote already open, the way production did. The ballot
+and alumni suites stop at the first wrong answer.
 
 `npm run gen-types` regenerates `src/types/database.ts` from the live schema.
 It needs the Supabase CLI. `src/types/domain.ts` is hand written and is what
@@ -154,6 +155,27 @@ When a vote opens, every eligible member of that fund gets the ballot as a
 pop-up on whatever page they're on, as well as the email. Athena members see
 Athena votes and Arch members see Arch ones. "Later" puts it off until they
 close the tab; the badge on Pitches keeps counting it.
+
+## The alumni page
+
+Club → Alumni lists everyone who has been through SMIF, from both funds, and
+anyone signed in to either fund can see it. Each person shows their LinkedIn
+link, the years they were in, the role they held each year, and the pitches
+they worked on.
+
+Someone shows up once they have been on a roster in a past year (as anything
+but a viewer, and not marked inactive) and are not active this year. The
+year rollover takes care of that, so nobody adds alumni by hand. Their
+pitches are the ones their sector took to a vote while they were on it, plus
+any they wrote.
+
+Members add their own LinkedIn link on their profile. For alumni who won't
+sign in again, the president, vice president, director of alumni relations
+or an app admin can add it: open the person from Team (pick their year) or
+from the alumni page's "Add link", and fill in the Alumni page box. It
+accepts whatever gets pasted and stores the clean
+`https://www.linkedin.com/in/...` form. The nightly backup carries the links
+in the Members tab.
 
 ## Loading the Arch book from the PM workbook
 
