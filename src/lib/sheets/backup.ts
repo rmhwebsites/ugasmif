@@ -712,6 +712,7 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
         "Sector Leader",
         "Status",
         "Title Override",
+        "LinkedIn",
       ],
       rows: memberships.map((m) => {
         const p = profileById.get(m.user_id);
@@ -725,6 +726,7 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
           m.is_sector_leader,
           m.status,
           m.title_override ?? "",
+          p?.linkedin_url ?? "",
         ];
       }),
     });

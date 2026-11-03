@@ -1,6 +1,6 @@
 // PATCH /api/profile — a signed-in user edits their own profiles row:
-// display name, avatar URL, and email mute preferences (SPEC 11.2 profile
-// page). RLS restricts the update to the caller's own row (global flags are
+// display name, avatar URL, LinkedIn link (shown on the alumni page), and
+// email mute preferences (SPEC 11.2 profile page). RLS restricts the update to the caller's own row (global flags are
 // blocked by the protect_profile_flags trigger). Audit-logged as
 // 'profile.update'.
 
@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthState } from "@/lib/fund";
 import { logAudit } from "@/lib/audit";
+import { normalizeLinkedIn } from "@/lib/alumni";
 import type { Profile } from "@/types/domain";
 
 const bodySchema = z
@@ -22,6 +23,8 @@ const bodySchema = z
     avatar_url: z
       .union([z.literal(""), z.url("Avatar must be a full http(s) URL").max(500)])
       .optional(),
+    // Anything someone pastes; normalized below. Empty string clears it.
+    linkedin_url: z.string().max(500).optional(),
     email_prefs: z
       .object({
         mute_updates: z.boolean().optional(),
@@ -33,6 +36,7 @@ const bodySchema = z
     (b) =>
       b.full_name !== undefined ||
       b.avatar_url !== undefined ||
+      b.linkedin_url !== undefined ||
       b.email_prefs !== undefined,
     { message: "Nothing to update" }
   );
@@ -60,6 +64,13 @@ export async function PATCH(request: NextRequest) {
     updates.avatar_url =
       parsed.data.avatar_url === "" ? null : parsed.data.avatar_url;
   }
+  if (parsed.data.linkedin_url !== undefined) {
+    const linkedin = normalizeLinkedIn(parsed.data.linkedin_url);
+    if ("error" in linkedin) {
+      return NextResponse.json({ error: linkedin.error }, { status: 400 });
+    }
+    updates.linkedin_url = linkedin.url;
+  }
   if (parsed.data.email_prefs !== undefined) {
     // Merge over the stored prefs so a partial payload never wipes a flag.
     updates.email_prefs = {
@@ -72,7 +83,7 @@ export async function PATCH(request: NextRequest) {
     .from("profiles")
     .update(updates)
     .eq("id", user.id)
-    .select("id, email, full_name, avatar_url, email_prefs")
+    .select("id, email, full_name, avatar_url, linkedin_url, email_prefs")
     .single();
   if (error || !updated) {
     return NextResponse.json(
@@ -90,6 +101,7 @@ export async function PATCH(request: NextRequest) {
     before: {
       full_name: profile.full_name,
       avatar_url: profile.avatar_url,
+      linkedin_url: profile.linkedin_url ?? null,
       email_prefs: profile.email_prefs ?? {},
     },
     after: updates,

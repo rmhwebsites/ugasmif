@@ -59,5 +59,17 @@ for migration in "$MIGRATIONS"/*.sql; do
 done
 run_psql -q -d "$BALLOT_DB" -f "$HERE/ballots.sql" || { echo "==> Ballot suite FAILED"; exit 1; }
 
+# The alumni suite: a fresh database with every migration, then its checks.
+ALUMNI_DB="${DB}_alumni"
+echo
+echo "==> Alumni suite: recreating $ALUMNI_DB"
+run_psql -q -c "drop database if exists $ALUMNI_DB" -d postgres
+run_psql -q -c "create database $ALUMNI_DB" -d postgres
+run_psql -q -v ON_ERROR_STOP=1 -d "$ALUMNI_DB" -f "$HERE/shim.sql" || exit 1
+for migration in "$MIGRATIONS"/*.sql; do
+  run_psql -q -v ON_ERROR_STOP=1 -d "$ALUMNI_DB" -f "$migration" >/dev/null || exit 1
+done
+run_psql -q -d "$ALUMNI_DB" -f "$HERE/alumni.sql" || { echo "==> Alumni suite FAILED"; exit 1; }
+
 echo
 echo "==> Done. Read the policy output above: each check states its expectation."

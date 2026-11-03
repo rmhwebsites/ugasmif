@@ -57,6 +57,7 @@ export const AUDIT_ACTION_GROUPS: {
       { code: "membership.update", label: "Membership change" },
       { code: "roster.import", label: "Roster imported" },
       { code: "profile.update", label: "Profile edited" },
+      { code: "profile.linkedin", label: "LinkedIn link set by an officer" },
       { code: "profile.onboarded", label: "Finished sign-up" },
       { code: "auth.admin_reset", label: "Password reset" },
       { code: "auth.set_temp_password", label: "Temporary password set" },

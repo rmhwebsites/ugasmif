@@ -41,6 +41,7 @@ export type NavKey =
   | "meetings"
   | "updates"
   | "team"
+  | "alumni"
   | "fundAdmin"
   | "sectorTargets"
   | "appAdmin";
@@ -107,6 +108,7 @@ export function fundNav(o: FundNavOptions): NavGroup[] {
         { key: "meetings", href: `${base}/attendance`, label: "Meetings" },
         { key: "updates", href: `${base}/updates`, label: "Updates" },
         { key: "team", href: `${base}/team`, label: "Team" },
+        { key: "alumni", href: `${base}/alumni`, label: "Alumni" },
       ],
     },
   ];
@@ -196,5 +198,6 @@ export const PAGE_NAMES: Record<string, string> = {
   attendance: "Meetings",
   updates: "Updates",
   team: "Team",
+  alumni: "Alumni",
   profile: "Profile",
 };

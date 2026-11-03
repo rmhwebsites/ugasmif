@@ -1,5 +1,5 @@
 // /[fund]/admin/members/[id] — one member: their role and sector this year,
-// sign-in help (resend the invite, reset link, temporary password), every
+// their LinkedIn link for the alumni page, sign-in help (resend the invite, reset link, temporary password), every
 // membership across funds and years, and a link to their audit history
 // (SPEC Section 7). [id] is the membership id the roster and Team link; an
 // account id from older links resolves too.
@@ -13,6 +13,7 @@ import { getFundContext } from "@/lib/fund";
 import { can, roleLabel } from "@/lib/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PasswordTools } from "@/components/admin/PasswordTools";
+import { LinkedInEditor } from "@/components/admin/LinkedInEditor";
 import { MembershipControls } from "@/components/admin/MemberEditor";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -171,6 +172,19 @@ export default async function MemberDetailPage({
           )}
         </div>
       </Card>
+
+      {inFund.length > 0 && (
+        <Card>
+          <CardHeader title="Alumni page" />
+          <div className="p-4 sm:p-6">
+            <LinkedInEditor
+              fund={ctx.fund.slug}
+              membershipId={editable?.id ?? inFund[0].id}
+              initial={profile.linkedin_url ?? null}
+            />
+          </div>
+        </Card>
+      )}
 
       <Card>
         <CardHeader title="Sign-in help" />
