@@ -7,7 +7,7 @@ import type { FundSlug, MembershipRole, PitchAction, PitchStatus } from "@/types
 
 // ── LinkedIn ────────────────────────────────────────────────────────────────
 
-const LINKEDIN_HELP = "Use a LinkedIn profile link, like linkedin.com/in/their-name.";
+const LINKEDIN_HELP = "Use a LinkedIn profile link, like linkedin.com/in/jane-doe.";
 
 /**
  * Whatever someone pastes ("linkedin.com/in/jane", "http://uk.linkedin.com/
