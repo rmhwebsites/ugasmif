@@ -42,6 +42,7 @@ import type {
   Trade,
   TradeTicket,
   Vote,
+  VoteOption,
 } from "@/types/domain";
 
 type Cell = string | number | boolean | null;
@@ -315,12 +316,13 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
         }),
       ]);
 
-    const [pitches, pitchFiles, votes, tickets, trades] = await Promise.all([
+    const [pitches, pitchFiles, votes, voteOptions, tickets, trades] = await Promise.all([
       fetchAll<Pitch>(service, "pitches", { orderBy: "created_at" }),
       fetchAll<Record<string, unknown>>(service, "pitch_files", {
         orderBy: "created_at",
       }),
       fetchAll<Vote>(service, "votes", { orderBy: "cast_at" }),
+      fetchAll<VoteOption>(service, "pitch_vote_options", { orderBy: "created_at" }),
       fetchAll<TradeTicket>(service, "trade_tickets", {
         orderBy: "created_at",
       }),
@@ -374,6 +376,7 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
     const yearLabel = new Map(academicYears.map((y) => [y.id, y.label]));
     const holdingById = new Map(holdings.map((h) => [h.id, h]));
     const pitchById = new Map(pitches.map((p) => [p.id, p]));
+    const optionById = new Map(voteOptions.map((o) => [o.id, o]));
     const meetingById = new Map(meetings.map((m) => [m.id, m]));
 
     const who = (id: string | null | undefined): string =>
@@ -559,6 +562,8 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
           "Result %",
           "Votes Yes",
           "Votes No",
+          "Votes Abstain",
+          "Allocation Passed",
           "Eligible",
           "Scheduled For",
           "Vote Opens",
@@ -580,6 +585,8 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
           num(p.result_pct),
           p.votes_yes,
           p.votes_no,
+          p.votes_abstain ?? 0,
+          p.winning_option_id ? optionById.get(p.winning_option_id)?.label ?? "" : "",
           p.eligible_voters ?? null,
           p.scheduled_for ?? "",
           p.vote_opens_at ?? "",
@@ -592,13 +599,28 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
 
     tabs.push({
       name: "Votes",
-      header: ["Pitch ID", "Pitch Title", "Voter", "Choice", "Cast At"],
+      header: ["Pitch ID", "Pitch Title", "Voter", "Choice", "Option", "Cast At"],
       rows: votes.map((v) => [
         v.pitch_id,
         pitchById.get(v.pitch_id)?.title ?? "",
         who(v.voter_id),
         v.choice,
+        v.option_id ? optionById.get(v.option_id)?.label ?? "" : "",
         v.cast_at,
+      ]),
+    });
+
+    tabs.push({
+      name: "Ballot Options",
+      header: ["Option ID", "Pitch ID", "Pitch Title", "Kind", "Label", "Amount", "Order"],
+      rows: voteOptions.map((o) => [
+        o.id,
+        o.pitch_id,
+        pitchById.get(o.pitch_id)?.title ?? "",
+        o.kind,
+        o.label,
+        num(o.amount),
+        o.sort_order,
       ]),
     });
 
@@ -690,6 +712,7 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
         "Sector Leader",
         "Status",
         "Title Override",
+        "LinkedIn",
       ],
       rows: memberships.map((m) => {
         const p = profileById.get(m.user_id);
@@ -703,6 +726,7 @@ export async function runBackup(triggeredBy: string): Promise<BackupRun> {
           m.is_sector_leader,
           m.status,
           m.title_override ?? "",
+          p?.linkedin_url ?? "",
         ];
       }),
     });

@@ -114,11 +114,71 @@ To apply pending migrations, whichever is easiest:
   It tracks what it has applied, so re-running is safe.
 
 To check what is applied, look for something the migration added. For example
-`select onboarded_at from profiles limit 1` errors if `0003` has not run.
+`select onboarded_at from profiles limit 1` errors if `0003` has not run, and
+`select votes_abstain from pitches limit 1` errors if `0006` has not, and
+`select linkedin_url from profiles limit 1` errors if `0007` has not.
+
+`0006` (ballot options) and `0007` (alumni page) have to be applied before
+the code that uses them is deployed. Both are safe to apply first: the app as
+it stood before keeps working against them.
+
+`supabase/tests/run.sh` runs the access-rule suite, the ballot suite and the
+alumni suite against a throwaway local Postgres. The ballot suite upgrades
+through `0006` with a vote already open, the way production did. The ballot
+and alumni suites stop at the first wrong answer.
 
 `npm run gen-types` regenerates `src/types/database.ts` from the live schema.
 It needs the Supabase CLI. `src/types/domain.ts` is hand written and is what
 the app code actually imports, so regenerating types is optional.
+
+## Votes with alternative allocations
+
+Every pitch vote opens with two options, "Yes, as pitched" (at the amount
+on the pitch) and "No", and any member can abstain. When the class lands on something else, say half the size, an
+officer or the app admin adds it: on the pitch page, **Vote → Edit options →
+Add an alternative allocation**, give it an amount, save. That works before
+voting opens and while it's open; the Manage pitches page links there too.
+
+- The pitch passes when all the yes options together reach the threshold
+  share of yes plus no. Abstentions count for neither side but do count
+  toward turnout for the quorum.
+- The yes option with the most votes is the allocation that passed, and its
+  amount goes on the trade ticket. A tie goes to the one listed first, which
+  is the pitch as written.
+- Rewording an option keeps its votes. Changing its amount or removing it
+  clears the votes cast for it, and those members are asked to vote again.
+  The form says how many before you save, and the audit log records it as
+  "Ballot options changed".
+- Once the vote closes, the ballot is fixed.
+
+When a vote opens, every eligible member of that fund gets the ballot as a
+pop-up on whatever page they're on, as well as the email. Athena members see
+Athena votes and Arch members see Arch ones. "Later" puts it off until they
+close the tab; the badge on Pitches keeps counting it.
+
+## The alumni page
+
+Club → Alumni lists everyone who has been through SMIF, from both funds, and
+anyone signed in to either fund can see it. Each person shows their LinkedIn
+link, the years they were in, the role they held each year, and the pitches
+they worked on.
+
+Someone shows up once they have been on a roster in a past year (as anything
+but a viewer, and not marked inactive) and are not active this year. The
+year rollover takes care of that, so nobody adds alumni by hand. Their
+pitches are the ones their sector took to a vote while they were on it, plus
+any they wrote.
+
+Members paste their LinkedIn link when they first sign up (it's optional)
+or add it later on their profile, and it shows as a link on their profile,
+their card on Team and their sector's page, and the alumni page. For alumni
+who won't
+sign in again, the president, vice president, director of alumni relations
+or an app admin can add it: open the person from Team (pick their year) or
+from the alumni page's "Add link", and fill in the Alumni page box. It
+accepts whatever gets pasted and stores the clean
+`https://www.linkedin.com/in/...` form. The nightly backup carries the links
+in the Members tab.
 
 ## Loading the Arch book from the PM workbook
 
@@ -336,10 +396,14 @@ or when you are rebuilding into a new project.
 
    `funds`, `academic_years`, `profiles`, `sectors`, `memberships`,
    `holdings`, `bond_marks`, `treasury_curve`, `fund_snapshots`,
-   `sector_targets`, `pitches`, `pitch_files`, `votes`, `trade_tickets`,
-   `trades`, `cash_movements`, `meetings`, `meeting_attendance`,
-   `fund_updates`, `update_reads`, `roster_imports`, `backup_runs`,
-   `price_snapshots`, `audit_log`.
+   `sector_targets`, `pitches`, `pitch_files`, `pitch_vote_options`,
+   `votes`, `trade_tickets`, `trades`, `cash_movements`, `meetings`,
+   `meeting_attendance`, `fund_updates`, `update_reads`, `roster_imports`,
+   `backup_runs`, `price_snapshots`, `audit_log`.
+
+   `pitches.winning_option_id` points at `pitch_vote_options`, which points
+   back at `pitches`, so load pitches with that column empty, then the
+   options, then set it from the file.
 
    Insert with the service role key (it bypasses row level security) or from
    the SQL editor. Ids in the file are the original ones, so relationships come

@@ -39,7 +39,8 @@ export type PitchStatus =
   | "withdrawn"
   | "executed";
 
-export type VoteChoice = "yes" | "no";
+/** An abstention counts toward turnout but for neither side (migration 0006). */
+export type VoteChoice = "yes" | "no" | "abstain";
 export type TicketStatus = "pending" | "executed" | "cancelled";
 export type TradeAction = "buy" | "sell";
 export type CashMovementKind =
@@ -106,6 +107,8 @@ export interface Profile {
   is_faculty_advisor: boolean;
   must_change_password: boolean;
   avatar_url: string | null;
+  /** Public LinkedIn profile link (migration 0007); shown on the alumni page. */
+  linkedin_url?: string | null;
   email_prefs?: { mute_updates?: boolean; mute_reminders?: boolean } | null;
   created_at: string;
   updated_at: string;
@@ -267,6 +270,10 @@ export interface Pitch {
   vote_closes_at: string | null;
   votes_yes: number;
   votes_no: number;
+  /** Set at close (migration 0006); undefined on a database without it. */
+  votes_abstain?: number;
+  /** The allocation that passed: the approve option with the most ballots. */
+  winning_option_id?: string | null;
   eligible_voters: number | null;
   result_pct: number | null;
   /** Threshold and quorum in force when the vote closed — frozen by
@@ -290,11 +297,34 @@ export interface PitchFile {
   created_at: string;
 }
 
+/**
+ * One line on a pitch's ballot (migration 0006). Approve options are
+ * allocations ("Yes, as pitched", "Yes, at $60,000"); there is one reject
+ * option, "No". Abstaining is not an option row: it is a ballot with no
+ * option.
+ */
+export type VoteOptionKind = "approve" | "reject";
+
+export interface VoteOption {
+  id: string;
+  pitch_id: string;
+  kind: VoteOptionKind;
+  label: string;
+  /** Dollars for an approve option; null means the amount pitched. */
+  amount: number | null;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Vote {
   id: string;
   pitch_id: string;
   voter_id: string;
   choice: VoteChoice;
+  /** The ballot option voted for; null for an abstention (and old ballots). */
+  option_id?: string | null;
   comment: string | null;
   cast_at: string;
 }

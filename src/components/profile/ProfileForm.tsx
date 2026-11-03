@@ -1,7 +1,8 @@
 "use client";
 
-// Profile self-service (SPEC 11.2): display name + avatar URL + email mute
-// preferences save through PATCH /api/profile; the password change runs
+// Profile self-service (SPEC 11.2): display name + avatar URL + LinkedIn link
+// (shown on the alumni page) + email mute preferences save through PATCH
+// /api/profile; the password change runs
 // entirely in the browser against the current Supabase session
 // (auth.updateUser), same flow as the auth landing pages.
 
@@ -16,6 +17,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 export interface ProfileFormInitial {
   full_name: string;
   avatar_url: string | null;
+  linkedin_url: string | null;
   email_prefs: { mute_updates?: boolean; mute_reminders?: boolean };
 }
 
@@ -46,6 +48,7 @@ export function ProfileForm({
   // ── Details form ──────────────────────────────────────────────────────────
   const [fullName, setFullName] = useState(initial.full_name);
   const [avatarUrl, setAvatarUrl] = useState(initial.avatar_url ?? "");
+  const [linkedin, setLinkedin] = useState(initial.linkedin_url ?? "");
   const [muteUpdates, setMuteUpdates] = useState(
     initial.email_prefs.mute_updates === true
   );
@@ -72,16 +75,20 @@ export function ProfileForm({
         body: JSON.stringify({
           full_name: fullName.trim(),
           avatar_url: avatarUrl.trim(),
+          linkedin_url: linkedin.trim(),
           email_prefs: {
             mute_updates: muteUpdates,
             mute_reminders: muteReminders,
           },
         }),
       });
-      const data: { error?: string } = await res.json().catch(() => ({}));
+      const data: { error?: string; profile?: { linkedin_url?: string | null } } =
+        await res.json().catch(() => ({}));
       if (!res.ok) {
         setSaveError(data.error ?? "Your profile could not be saved.");
       } else {
+        // Show the link the way it was saved (https://www.linkedin.com/in/…).
+        setLinkedin(data.profile?.linkedin_url ?? "");
         setSaved(true);
         router.refresh();
       }
@@ -155,6 +162,30 @@ export function ProfileForm({
               onChange={(e) => setFullName(e.target.value)}
               className={inputClass}
             />
+          </div>
+
+          <div>
+            <label
+              htmlFor="profile-linkedin"
+              className="mb-1 block text-xs font-medium text-muted"
+            >
+              LinkedIn
+            </label>
+            <input
+              id="profile-linkedin"
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              maxLength={500}
+              value={linkedin}
+              onChange={(e) => setLinkedin(e.target.value)}
+              placeholder="linkedin.com/in/your-name"
+              className={inputClass}
+            />
+            <p className="mt-1 text-xs text-muted">
+              Optional. Shown on your profile, your Team card and, after your
+              time in SMIF, the alumni page.
+            </p>
           </div>
 
           <fieldset className="space-y-2">

@@ -40,5 +40,36 @@ done
 echo "==> Policy suite"
 run_psql -q -d "$DB" -f "$HERE/policies.sql"
 
+# The ballot suite gets its own database, upgraded the way production is:
+# migrations up to 0005, a vote already open with plain yes/no ballots, then
+# 0006 onward. It checks itself and stops at the first wrong answer.
+BALLOT_DB="${DB}_ballots"
 echo
-echo "==> Done. Read the output above: each check states its expectation."
+echo "==> Ballot suite: recreating $BALLOT_DB"
+run_psql -q -c "drop database if exists $BALLOT_DB" -d postgres
+run_psql -q -c "create database $BALLOT_DB" -d postgres
+run_psql -q -v ON_ERROR_STOP=1 -d "$BALLOT_DB" -f "$HERE/shim.sql" || exit 1
+seeded=0
+for migration in "$MIGRATIONS"/*.sql; do
+  if [ "$seeded" = 0 ] && [[ "$(basename "$migration")" > "0006" ]]; then
+    run_psql -q -v ON_ERROR_STOP=1 -d "$BALLOT_DB" -f "$HERE/ballots_before.sql" || exit 1
+    seeded=1
+  fi
+  run_psql -q -v ON_ERROR_STOP=1 -d "$BALLOT_DB" -f "$migration" >/dev/null || exit 1
+done
+run_psql -q -d "$BALLOT_DB" -f "$HERE/ballots.sql" || { echo "==> Ballot suite FAILED"; exit 1; }
+
+# The alumni suite: a fresh database with every migration, then its checks.
+ALUMNI_DB="${DB}_alumni"
+echo
+echo "==> Alumni suite: recreating $ALUMNI_DB"
+run_psql -q -c "drop database if exists $ALUMNI_DB" -d postgres
+run_psql -q -c "create database $ALUMNI_DB" -d postgres
+run_psql -q -v ON_ERROR_STOP=1 -d "$ALUMNI_DB" -f "$HERE/shim.sql" || exit 1
+for migration in "$MIGRATIONS"/*.sql; do
+  run_psql -q -v ON_ERROR_STOP=1 -d "$ALUMNI_DB" -f "$migration" >/dev/null || exit 1
+done
+run_psql -q -d "$ALUMNI_DB" -f "$HERE/alumni.sql" || { echo "==> Alumni suite FAILED"; exit 1; }
+
+echo
+echo "==> Done. Read the policy output above: each check states its expectation."

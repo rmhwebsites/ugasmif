@@ -45,6 +45,8 @@ import { StockChart } from "@/components/holdings/StockChart";
 import { KeyStatsCard } from "@/components/holdings/KeyStats";
 import { SecurityLogo } from "@/components/holdings/SecurityLogo";
 import type { TallyVoter } from "@/components/pitch/TallyCard";
+import type { EditableOption } from "@/components/pitch/BallotEditor";
+import { defaultOptions, orderOptions, tallyBallot, toView } from "@/lib/ballot";
 import {
   easternDateString,
   formatCurrency,
@@ -61,6 +63,7 @@ import type {
   Trade,
   TradeTicket,
   VoteChoice,
+  VoteOption,
 } from "@/types/domain";
 import { isPitchId, loadPitch } from "./load-pitch";
 
@@ -210,6 +213,7 @@ function renderMarkdown(md: string): ReactNode[] {
 interface VoteRow {
   voter_id: string;
   choice: VoteChoice;
+  option_id: string | null;
   comment: string | null;
   cast_at: string;
   voter: { full_name: string } | null;
@@ -307,6 +311,7 @@ export default async function PitchDetailPage({
     holdingRes,
     quote,
     keyStats,
+    optionsRes,
   ] = await Promise.all([
       supabase
         .from("pitch_files")
@@ -316,7 +321,7 @@ export default async function PitchDetailPage({
       // RLS: members get back only their own ballot; officers/advisor get all.
       supabase
         .from("votes")
-        .select("voter_id, choice, comment, cast_at, voter:profiles!voter_id(full_name)")
+        .select("voter_id, choice, option_id, comment, cast_at, voter:profiles!voter_id(full_name)")
         .eq("pitch_id", pitch.id)
         .order("cast_at"),
       settings.paired_pitch_id
@@ -363,6 +368,12 @@ export default async function PitchDetailPage({
       chartSymbol
         ? getKeyStats(chartSymbol).catch(() => ({}))
         : Promise.resolve({}),
+      // What the vote is on: the pitch as written, any alternative
+      // allocations, and No (migration 0006).
+      supabase
+        .from("pitch_vote_options")
+        .select("*")
+        .eq("pitch_id", pitch.id),
     ]);
 
   // Only what the viewer needs — it links through our own route, which signs
@@ -395,11 +406,31 @@ export default async function PitchDetailPage({
 
   const voteRows = (votesRes.data as unknown as VoteRow[] | null) ?? [];
   const myVoteRow = voteRows.find((v) => v.voter_id === user?.id) ?? null;
-  const liveYes = voteRows.filter((v) => v.choice === "yes").length;
-  const liveNo = voteRows.filter((v) => v.choice === "no").length;
+
+  // The ballot. A pitch nobody has saved one for shows the two it will open
+  // with; a vote that closed before options existed has none and reads as
+  // plain yes/no.
+  const proposedAmount =
+    pitch.proposed_amount === null ? null : Number(pitch.proposed_amount);
+  const optionRows = orderOptions((optionsRes.data as VoteOption[] | null) ?? []);
+  const voteClosed = ["passed", "failed", "executed", "withdrawn"].includes(pitch.status);
+  const ballotOptions =
+    optionRows.length > 0
+      ? optionRows.map((o) => toView(o, proposedAmount))
+      : voteClosed
+        ? []
+        : defaultOptions(proposedAmount);
+  const optionLabel = new Map(optionRows.map((o) => [o.id, o.label]));
+  // Officers and the advisor get every ballot; a member gets only their own,
+  // so this tally means something only for them.
+  const tally = tallyBallot(optionRows, voteRows);
+  const optionCounts = Object.fromEntries(
+    tally.rows.map((r) => [r.option.id, r.count])
+  );
   const voters: TallyVoter[] = voteRows.map((v) => ({
     name: v.voter?.full_name ?? "Member",
     choice: v.choice,
+    optionLabel: v.option_id ? optionLabel.get(v.option_id) ?? null : null,
     comment: v.comment,
     castAt: v.cast_at,
   }));
@@ -505,7 +536,15 @@ export default async function PitchDetailPage({
   if (pitch.status === "voting") {
     nextStep = {
       text: `Voting is open until ${formatDateTime(pitch.vote_closes_at)} ET.${
-        canVoteNow && myVoteRow ? ` You voted ${myVoteRow.choice}.` : ""
+        canVoteNow && myVoteRow
+          ? myVoteRow.choice === "abstain"
+            ? " You abstained."
+            : ` You voted ${
+                myVoteRow.option_id && optionLabel.has(myVoteRow.option_id)
+                  ? `“${optionLabel.get(myVoteRow.option_id)}”`
+                  : myVoteRow.choice
+              }.`
+          : ""
       }`,
       links: [
         {
@@ -868,6 +907,7 @@ export default async function PitchDetailPage({
             voteClosesAt={pitch.vote_closes_at}
             votesYes={pitch.votes_yes}
             votesNo={pitch.votes_no}
+            votesAbstain={pitch.votes_abstain ?? 0}
             resultPct={pitch.result_pct === null ? null : Number(pitch.result_pct)}
             eligibleVoters={pitch.eligible_voters}
             thresholdPct={thresholdPct}
@@ -875,15 +915,52 @@ export default async function PitchDetailPage({
             canVote={canVoteNow}
             voteBlockedReason={voteBlockedReason}
             canViewIndividual={canViewIndividual}
+            options={ballotOptions}
+            optionCounts={canViewIndividual ? optionCounts : null}
+            winningOptionId={pitch.winning_option_id ?? null}
+            leadingOptionId={canViewIndividual ? tally.leader?.id ?? null : null}
             myVote={
               myVoteRow
-                ? { choice: myVoteRow.choice, comment: myVoteRow.comment }
+                ? {
+                    choice: myVoteRow.choice,
+                    optionId: myVoteRow.option_id ?? null,
+                    comment: myVoteRow.comment,
+                  }
                 : null
             }
             ballotsCast={ballotsCast}
-            liveYes={canViewIndividual ? liveYes : null}
-            liveNo={canViewIndividual ? liveNo : null}
+            liveYes={canViewIndividual ? tally.yes : null}
+            liveNo={canViewIndividual ? tally.no : null}
+            liveAbstain={canViewIndividual ? tally.abstain : null}
             voters={canViewIndividual ? voters : null}
+            editor={
+              canSchedule && !voteClosed
+                ? {
+                    proposedAmount,
+                    options:
+                      optionRows.length > 0
+                        ? optionRows.map(
+                            (o): EditableOption => ({
+                              id: o.id,
+                              kind: o.kind,
+                              label: o.label,
+                              amount: o.amount === null ? null : Number(o.amount),
+                              sort_order: o.sort_order,
+                              ballots: optionCounts[o.id] ?? 0,
+                            })
+                          )
+                        : defaultOptions(proposedAmount).map(
+                            (o, i): EditableOption => ({
+                              kind: o.kind,
+                              label: o.label,
+                              amount: o.amount,
+                              sort_order: i,
+                              ballots: 0,
+                            })
+                          ),
+                  }
+                : null
+            }
           />
 
           {hasActions && (
@@ -952,6 +1029,11 @@ export default async function PitchDetailPage({
                             >
                               {ticket.status}
                             </Badge>
+                            {ticket.est_amount !== null && (
+                              <span className="ml-auto font-medium tabular-nums">
+                                {formatCurrency(Number(ticket.est_amount))}
+                              </span>
+                            )}
                           </p>
                           {ticket.status === "pending" && ticketHref && (
                             <p className="text-muted">

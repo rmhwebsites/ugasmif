@@ -5,7 +5,8 @@
 //
 // Each sector heading opens the sector, and the viewer's own sector comes
 // right after the officers. For people who manage members, each card opens
-// that member's page in Fund admin.
+// that member's page in Fund admin. A search box above narrows the roster to
+// one grid of matches by name, role or sector.
 
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -23,6 +24,7 @@ import {
   MemberCarousel,
   type TeamMember,
 } from "@/components/team/MemberCarousel";
+import { TeamSearch } from "@/components/team/TeamSearch";
 import type {
   AcademicYear,
   Membership,
@@ -34,7 +36,7 @@ import { ManageLink, PageHeader } from "@/components/ui/PageHeader";
 export const metadata: Metadata = { title: "Team" };
 
 type MemberRow = Membership & {
-  profiles: Pick<Profile, "full_name" | "email" | "avatar_url"> | null;
+  profiles: Pick<Profile, "full_name" | "email" | "avatar_url" | "linkedin_url"> | null;
 };
 
 /**
@@ -52,6 +54,7 @@ function toCards(
     avatarUrl: m.profiles?.avatar_url ?? null,
     isLeader: m.is_sector_leader,
     href: memberHref ? memberHref(m.id) : undefined,
+    linkedinUrl: m.profiles?.linkedin_url ?? null,
   }));
 }
 
@@ -80,7 +83,7 @@ export default async function TeamPage({
   const [membersRes, sectorsRes] = await Promise.all([
     supabase
       .from("memberships")
-      .select("*, profiles(full_name, email, avatar_url)")
+      .select("*, profiles(full_name, email, avatar_url, linkedin_url)")
       .eq("fund_id", ctx.fund.id)
       .eq("academic_year_id", selectedYear.id)
       .order("created_at"),
@@ -97,6 +100,7 @@ export default async function TeamPage({
     OFFICER_ROLES.includes(m.role)
   );
   const managesMembers = canOpenAdminSection(ctx, "members");
+  const sectorName = new Map(sectors.map((s) => [s.id, s.name]));
   const memberHref = managesMembers
     ? (id: string) => `/${ctx.fund.slug}/admin/members/${id}`
     : null;
@@ -146,7 +150,14 @@ export default async function TeamPage({
       {!isCurrentYear && (
         <p className="rounded-lg bg-highlight px-4 py-2 text-sm text-muted">
           Viewing the {selectedYear.label} roster. These members are alumni
-          now.
+          now; the{" "}
+          <Link
+            href={`/${ctx.fund.slug}/alumni`}
+            className="font-medium text-accent-text hover:underline"
+          >
+            alumni page
+          </Link>{" "}
+          has everyone from every year.
         </p>
       )}
 
@@ -171,7 +182,15 @@ export default async function TeamPage({
           </p>
         </div>
       ) : (
-        <>
+        <TeamSearch
+          yearLabel={selectedYear.label}
+          members={toCards(members, memberHref).map((card, i) => ({
+            ...card,
+            sector: members[i].sector_id
+              ? sectorName.get(members[i].sector_id as string) ?? null
+              : null,
+          }))}
+        >
           {/* Officers */}
           <section className="glass-card p-4 sm:p-6">
             <h2 className="mb-3 text-base font-semibold sm:text-lg">
@@ -220,7 +239,7 @@ export default async function TeamPage({
               </section>
             );
           })}
-        </>
+        </TeamSearch>
       )}
     </div>
   );

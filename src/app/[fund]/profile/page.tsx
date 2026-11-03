@@ -1,4 +1,5 @@
-// /[fund]/profile — name, avatar, email preferences, password (SPEC 11.2).
+// /[fund]/profile — name, avatar, LinkedIn, email preferences, password
+// (SPEC 11.2).
 // Server component loads the account card (email + roles across both funds,
 // read-only); the ProfileForm client island does the editing. A member with
 // a sector gets "My sector" in the header, and each sector in the roles list
@@ -6,7 +7,7 @@
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Mail, ShieldCheck } from "lucide-react";
+import { ExternalLink, Mail, ShieldCheck } from "lucide-react";
 import { getAuthState, getFundContext } from "@/lib/fund";
 import { roleLabel } from "@/lib/permissions";
 import { ProfileForm } from "@/components/profile/ProfileForm";
@@ -75,6 +76,7 @@ export default async function ProfilePage({
             initial={{
               full_name: ctx.profile.full_name,
               avatar_url: ctx.profile.avatar_url,
+              linkedin_url: ctx.profile.linkedin_url ?? null,
               email_prefs: ctx.profile.email_prefs ?? {},
             }}
           />
@@ -95,6 +97,28 @@ export default async function ProfilePage({
                 <p className="mt-1 text-xs text-muted">
                   Your sign-in email. An officer can change it.
                 </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-muted">LinkedIn</p>
+                {ctx.profile.linkedin_url ? (
+                  <a
+                    href={ctx.profile.linkedin_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex max-w-full items-center gap-1.5 text-sm font-medium text-accent-text hover:underline"
+                  >
+                    <span className="truncate">
+                      {ctx.profile.linkedin_url.replace(/^https:\/\/(www\.)?/, "")}
+                    </span>
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                  </a>
+                ) : (
+                  <p className="mt-1 text-sm text-muted">
+                    Not added yet. Paste yours under Your details.
+                  </p>
+                )}
               </div>
 
               <div>

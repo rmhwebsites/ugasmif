@@ -15,7 +15,8 @@ import { can } from "@/lib/permissions";
 import { logAudit } from "@/lib/audit";
 import { sendToFund } from "@/lib/emails/send";
 import { formatDateTime } from "@/lib/format";
-import type { Fund, MembershipRole, Pitch } from "@/types/domain";
+import { optionText, orderOptions } from "@/lib/ballot";
+import type { Fund, MembershipRole, Pitch, VoteOption } from "@/types/domain";
 
 const bodySchema = z.object({
   /** Override of fund.vote_default_window_hours for this vote. */
@@ -71,6 +72,20 @@ export async function openPitchVote(
     .neq("role", "viewer");
   const eligible = count ?? 0;
 
+  // The ballot: whatever an officer set up beforehand, else "Yes, as
+  // pitched" and "No". Done before the status changes, so a vote never opens
+  // without one.
+  const { error: ballotError } = await supabase.rpc("ensure_ballot_options", {
+    p_pitch_id: pitch.id,
+  });
+  if (ballotError) throw new Error(ballotError.message);
+  const { data: optionRows } = await supabase
+    .from("pitch_vote_options")
+    .select("*")
+    .eq("pitch_id", pitch.id);
+  const options = orderOptions((optionRows ?? []) as VoteOption[]);
+  const proposed = pitch.proposed_amount === null ? null : Number(pitch.proposed_amount);
+
   const fundDefault = Number(fund.vote_default_window_hours);
   const hours =
     windowHours ??
@@ -120,6 +135,11 @@ export async function openPitchVote(
     heading: "A vote is open",
     bodyLines: [
       `Voting on "${pitch.title}" is open now and closes ${formatDateTime(closes)} ET.`,
+      ...(options.length > 0
+        ? [
+            `On the ballot: ${options.map((o) => optionText(o, proposed)).join("; ")}. You can also abstain.`,
+          ]
+        : []),
       "You can change your ballot any time before it closes.",
     ],
     ctaLabel: "Cast your vote",

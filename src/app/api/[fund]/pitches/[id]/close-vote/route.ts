@@ -10,21 +10,8 @@ import { getAuthState, getFundContext } from "@/lib/fund";
 import { can } from "@/lib/permissions";
 import { sendEmail, sendToFund } from "@/lib/emails/send";
 import { formatPercent } from "@/lib/format";
-import type { Pitch } from "@/types/domain";
-
-/** Shape of the close_pitch_vote RPC's jsonb result. */
-interface CloseResult {
-  status: string;
-  result_pct: number | null;
-  votes_yes: number;
-  votes_no: number;
-  eligible_voters?: number | null;
-  ticket_id?: string | null;
-  already_closed?: boolean;
-  /** The rule the vote was judged under, frozen when it opened (SPEC 12). */
-  threshold_pct?: number | null;
-  quorum_pct?: number | null;
-}
+import { resultSummary, tallyText, type CloseResult } from "@/lib/ballot";
+import type { Pitch, VoteOption } from "@/types/domain";
 
 export async function POST(
   _request: NextRequest,
@@ -89,13 +76,22 @@ export async function POST(
   const pct = formatPercent(
     result.result_pct === null ? null : Number(result.result_pct)
   );
+  const { data: optionRows } = await supabase
+    .from("pitch_vote_options")
+    .select("*")
+    .eq("pitch_id", pitch.id);
+  const summary = resultSummary(
+    result,
+    (optionRows ?? []) as VoteOption[],
+    pitch.proposed_amount === null ? null : Number(pitch.proposed_amount)
+  );
 
   // Result email to the whole fund — always sent (SPEC Section 16).
   await sendToFund(supabase, ctx.fund.id, {
     subject: `Vote result: ${pitch.title} ${passed ? `passed at ${pct}` : "did not pass"}`,
     heading: passed ? `${pitch.title} passed` : `${pitch.title} did not pass`,
     bodyLines: [
-      `The vote closed with ${result.votes_yes} yes / ${result.votes_no} no (${pct} yes).`,
+      ...summary,
       passed
         ? pitch.action === "rebalance"
           ? "The rebalance passed. An officer will apply the new sector targets from the admin page."
@@ -115,7 +111,8 @@ export async function POST(
       subject: `Ticket ready: ${pitch.title}`,
       heading: "A trade ticket is ready",
       bodyLines: [
-        `${pitch.title} passed at ${pct} (${result.votes_yes} yes / ${result.votes_no} no).`,
+        `${pitch.title} passed at ${pct} (${tallyText(result)}).`,
+        ...summary.slice(1),
         "A pending ticket was created from the pitch. Record the execution once the trade is placed.",
       ],
       ctaLabel: "Open pending tickets",

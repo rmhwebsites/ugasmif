@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarClock, Hourglass, Vote } from "lucide-react";
+import { CalendarClock, Hourglass, Pencil, Vote } from "lucide-react";
 import { getAuthState, getFundContext } from "@/lib/fund";
 import { can, canOpenAdminSection } from "@/lib/permissions";
 import { voteRule } from "@/lib/votes";
@@ -20,6 +20,7 @@ import { PageHeader, ViewLink } from "@/components/ui/PageHeader";
 import { SectorLink } from "@/components/ui/SectorLink";
 import { ScheduleControls } from "@/components/pitch/ScheduleControls";
 import { TallyCard, type TallyVoter } from "@/components/pitch/TallyCard";
+import { tallyBallot, toView } from "@/lib/ballot";
 import { pitchActionLine } from "@/components/pitch/PitchCard";
 import {
   easternDateString,
@@ -27,7 +28,7 @@ import {
   formatDateTime,
   formatPercent,
 } from "@/lib/format";
-import type { Meeting, Pitch, VoteChoice } from "@/types/domain";
+import type { Meeting, Pitch, VoteChoice, VoteOption } from "@/types/domain";
 import { adminTitle } from "../admin-metadata";
 
 export const generateMetadata = adminTitle("pitches", "Manage pitches");
@@ -41,6 +42,7 @@ interface VoteRow {
   pitch_id: string;
   voter_id: string;
   choice: VoteChoice;
+  option_id: string | null;
   comment: string | null;
   cast_at: string;
   voter: { full_name: string } | null;
@@ -138,18 +140,27 @@ export default async function AdminPitchesPage({
     .filter((p) => p.status === "passed" || p.status === "failed")
     .slice(0, 5);
 
-  // Ballots for the open votes (officer RLS returns every row).
+  // Ballots and ballot options for the open votes (officer RLS returns
+  // every row).
   const votesByPitch = new Map<string, VoteRow[]>();
+  const optionsByPitch = new Map<string, VoteOption[]>();
   if (voting.length > 0) {
-    const { data: voteRows } = await supabase
-      .from("votes")
-      .select("pitch_id, voter_id, choice, comment, cast_at, voter:profiles!voter_id(full_name)")
-      .in("pitch_id", voting.map((p) => p.id))
-      .order("cast_at");
+    const ids = voting.map((p) => p.id);
+    const [{ data: voteRows }, { data: optionRows }] = await Promise.all([
+      supabase
+        .from("votes")
+        .select("pitch_id, voter_id, choice, option_id, comment, cast_at, voter:profiles!voter_id(full_name)")
+        .in("pitch_id", ids)
+        .order("cast_at"),
+      supabase.from("pitch_vote_options").select("*").in("pitch_id", ids),
+    ]);
     for (const v of (voteRows as unknown as VoteRow[] | null) ?? []) {
       const list = votesByPitch.get(v.pitch_id) ?? [];
       list.push(v);
       votesByPitch.set(v.pitch_id, list);
+    }
+    for (const o of (optionRows as VoteOption[] | null) ?? []) {
+      optionsByPitch.set(o.pitch_id, [...(optionsByPitch.get(o.pitch_id) ?? []), o]);
     }
   }
 
@@ -272,8 +283,11 @@ export default async function AdminPitchesPage({
             ) : (
               voting.map((p) => {
                 const rows = votesByPitch.get(p.id) ?? [];
-                const yes = rows.filter((v) => v.choice === "yes").length;
-                const no = rows.filter((v) => v.choice === "no").length;
+                const optionRows = optionsByPitch.get(p.id) ?? [];
+                const tally = tallyBallot(optionRows, rows);
+                const proposed = p.proposed_amount === null ? null : Number(p.proposed_amount);
+                const labels = new Map(optionRows.map((o) => [o.id, o.label]));
+                const approves = optionRows.filter((o) => o.kind === "approve").length;
                 const votedIds = new Set(rows.map((v) => v.voter_id));
                 const nonVoters = members
                   .filter((m) => !votedIds.has(m.user_id))
@@ -281,6 +295,7 @@ export default async function AdminPitchesPage({
                 const voters: TallyVoter[] = rows.map((v) => ({
                   name: v.voter?.full_name ?? "Member",
                   choice: v.choice,
+                  optionLabel: v.option_id ? labels.get(v.option_id) ?? null : null,
                   comment: v.comment,
                   castAt: v.cast_at,
                 }));
@@ -293,15 +308,32 @@ export default async function AdminPitchesPage({
                       </span>
                     </div>
                     <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                      <TallyCard
-                        yes={yes}
-                        no={no}
-                        eligible={p.eligible_voters}
-                        thresholdPct={voteRule(p, ctx.fund).thresholdPct}
-                        quorumPct={voteRule(p, ctx.fund).quorumPct}
-                        live
-                        voters={voters}
-                      />
+                      <div>
+                        <TallyCard
+                          yes={tally.yes}
+                          no={tally.no}
+                          abstain={tally.abstain}
+                          eligible={p.eligible_voters}
+                          thresholdPct={voteRule(p, ctx.fund).thresholdPct}
+                          quorumPct={voteRule(p, ctx.fund).quorumPct}
+                          live
+                          options={tally.rows.map((r) => ({
+                            ...toView(r.option, proposed),
+                            count: r.count,
+                          }))}
+                          winningOptionId={approves > 1 ? tally.leader?.id ?? null : null}
+                          voters={voters}
+                        />
+                        {canSchedule && (
+                          <Link
+                            href={`/${slug}/pitches/${p.id}#vote`}
+                            className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent-text hover:underline"
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden />
+                            Edit the ballot options
+                          </Link>
+                        )}
+                      </div>
                       <div>
                         <p className="mb-2 text-xs font-medium text-muted">
                           Has not voted ({nonVoters.length})

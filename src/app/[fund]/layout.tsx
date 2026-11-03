@@ -30,12 +30,25 @@ import {
   MobileTitle,
 } from "@/components/layout/MobileNav";
 import { FundCookie } from "@/components/layout/FundCookie";
+import { BallotPrompt, type PromptPitch } from "@/components/pitch/BallotPrompt";
+import { defaultOptions, orderOptions, toView } from "@/lib/ballot";
 import { NotOnRoster } from "@/components/layout/NotOnRoster";
 import {
   FUND_SHORT_NAMES,
   type FundNavOptions,
 } from "@/components/layout/fundNav";
-import type { FundSlug } from "@/types/domain";
+import type { FundSlug, VoteOption } from "@/types/domain";
+
+interface VotingPitchRow {
+  id: string;
+  title: string;
+  sector_id: string;
+  proposed_amount: number | null;
+  vote_opens_at: string | null;
+  vote_closes_at: string | null;
+  sector: { name: string } | null;
+  author: { full_name: string } | null;
+}
 
 // Tab titles name the fund, so two tabs open on Holdings can be told apart:
 // "Holdings · Athena · SMIF Hub". Pages export a plain title; a page without
@@ -99,9 +112,12 @@ export default async function FundLayout({
     can(ctx, "cast_vote")
       ? supabase
           .from("pitches")
-          .select("id")
+          .select(
+            "id, title, sector_id, proposed_amount, vote_opens_at, vote_closes_at, sector:sectors(name), author:profiles!author_id(full_name)"
+          )
           .eq("fund_id", ctx.fund.id)
           .eq("status", "voting")
+          .order("vote_closes_at")
       : Promise.resolve({ data: [] }),
   ]);
   const adminSections: Partial<Record<FundSlug, string[]>> = {};
@@ -110,18 +126,65 @@ export default async function FundLayout({
     if (c) adminSections[f.slug] = [...adminSectionsFor(c)];
   });
 
-  // Open votes still waiting on this member, for the badge on Pitches.
-  const votingIds = ((votingRes.data as { id: string }[] | null) ?? []).map(
-    (p) => p.id
-  );
+  // Open votes still waiting on this member, for the badge on Pitches and
+  // the pop-up ballot. Members only ever see their own fund's pitches here,
+  // so an Arch analyst gets Arch votes and an Athena analyst Athena ones.
+  const voting = (votingRes.data as unknown as VotingPitchRow[] | null) ?? [];
+  const votingIds = voting.map((p) => p.id);
   let votesWaiting = 0;
+  let prompt: PromptPitch[] = [];
   if (votingIds.length > 0) {
     const { data: cast } = await supabase
       .from("votes")
       .select("pitch_id")
       .eq("voter_id", user.id)
       .in("pitch_id", votingIds);
-    votesWaiting = votingIds.length - (cast?.length ?? 0);
+    const castIds = new Set(((cast as { pitch_id: string }[] | null) ?? []).map((v) => v.pitch_id));
+    votesWaiting = votingIds.length - castIds.size;
+
+    // The pop-up asks only where this member's ballot would be taken: the
+    // window is open now, and the fund lets the pitching sector vote on its
+    // own pitch or this isn't their sector's.
+    const now = new Date().getTime();
+    const sectorCanVote = ctx.fund.settings?.sector_can_vote_on_own_pitch !== false;
+    const ask = voting.filter(
+      (p) =>
+        !castIds.has(p.id) &&
+        p.vote_opens_at !== null &&
+        p.vote_closes_at !== null &&
+        new Date(p.vote_opens_at).getTime() <= now &&
+        new Date(p.vote_closes_at).getTime() > now &&
+        (sectorCanVote || !inSector(ctx, p.sector_id))
+    );
+    if (ask.length > 0) {
+      const { data: optionRows } = await supabase
+        .from("pitch_vote_options")
+        .select("*")
+        .in(
+          "pitch_id",
+          ask.map((p) => p.id)
+        );
+      const byPitch = new Map<string, VoteOption[]>();
+      for (const o of (optionRows as VoteOption[] | null) ?? []) {
+        byPitch.set(o.pitch_id, [...(byPitch.get(o.pitch_id) ?? []), o]);
+      }
+      prompt = ask.map((p) => {
+        const proposed = p.proposed_amount === null ? null : Number(p.proposed_amount);
+        const options = orderOptions(byPitch.get(p.id) ?? []);
+        return {
+          id: p.id,
+          title: p.title,
+          byline: [p.sector?.name, p.author?.full_name ? `pitched by ${p.author.full_name}` : null]
+            .filter(Boolean)
+            .join(" · "),
+          closesAt: p.vote_closes_at as string,
+          options:
+            options.length > 0
+              ? options.map((o) => toView(o, proposed))
+              : defaultOptions(proposed),
+        };
+      });
+    }
   }
 
   const headerLine = ctx.isAppAdmin
@@ -179,6 +242,7 @@ export default async function FundLayout({
           >
             {children}
           </main>
+          {prompt.length > 0 && <BallotPrompt fund={ctx.fund.slug} pitches={prompt} />}
         </div>
       </div>
     </MobileNavProvider>

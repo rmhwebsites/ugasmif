@@ -3,7 +3,12 @@
 // A row of people you swipe through: picture, name, role under the name.
 // Used wherever the app lists a team, so the Team page and a sector page
 // show the same card. A card with `href` (the member editor, for people who
-// manage members) opens it; otherwise the card is plain.
+// manage members) opens it; otherwise the card is plain. A member with a
+// LinkedIn link gets one at the bottom of the card.
+//
+// The clickable card is a stretched link (the name's link covers the card)
+// rather than one <a> around everything, so the LinkedIn link can sit inside
+// it: a link can't contain another link.
 //
 // Built on native overflow scrolling with snap points rather than a carousel
 // library: touch, trackpad and keyboard all work without shipping anything,
@@ -12,7 +17,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 
 export type TeamMember = {
@@ -24,33 +29,20 @@ export type TeamMember = {
   isLeader: boolean;
   /** Where the card opens, e.g. the member's page in Fund admin. */
   href?: string;
+  /** Their LinkedIn profile, when they've added one. */
+  linkedinUrl?: string | null;
 };
 
 const CARD =
   "flex h-full flex-col items-center rounded-xl bg-highlight p-3 text-center sm:p-4";
 
 export function MemberCard({ member }: { member: TeamMember }) {
-  if (member.href) {
-    return (
-      <Link
-        href={member.href}
-        title={`Manage ${member.name}`}
-        className={`${CARD} transition-colors hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-text`}
-      >
-        <MemberCardBody member={member} />
-      </Link>
-    );
-  }
   return (
-    <div className={CARD}>
-      <MemberCardBody member={member} />
-    </div>
-  );
-}
-
-function MemberCardBody({ member }: { member: TeamMember }) {
-  return (
-    <>
+    <div
+      className={`${CARD} relative ${
+        member.href ? "transition-colors hover:bg-accent-soft" : ""
+      }`}
+    >
       <Avatar
         src={member.avatarUrl}
         size="lg"
@@ -59,7 +51,17 @@ function MemberCardBody({ member }: { member: TeamMember }) {
         }`}
       />
       <p className="mt-2 text-sm font-medium leading-snug text-balance">
-        {member.name}
+        {member.href ? (
+          <Link
+            href={member.href}
+            title={`Manage ${member.name}`}
+            className="outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-accent-text"
+          >
+            {member.name}
+          </Link>
+        ) : (
+          member.name
+        )}
       </p>
       <p
         className={`mt-1 text-xs leading-snug ${
@@ -68,7 +70,19 @@ function MemberCardBody({ member }: { member: TeamMember }) {
       >
         {member.role}
       </p>
-    </>
+      {member.linkedinUrl && (
+        <a
+          href={member.linkedinUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="relative z-10 mt-auto inline-flex items-center gap-1 pt-2 text-xs font-medium text-accent-text hover:underline"
+        >
+          LinkedIn
+          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+          <span className="sr-only">(opens {member.name}&apos;s profile in a new tab)</span>
+        </a>
+      )}
+    </div>
   );
 }
 
