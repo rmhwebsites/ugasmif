@@ -183,8 +183,8 @@ export function ProfileForm({
               className={inputClass}
             />
             <p className="mt-1 text-xs text-muted">
-              Optional. Shown next to your name on the alumni page after your
-              time in SMIF, so the people who come after you can find you.
+              Optional. Shown on your profile, your Team card and, after your
+              time in SMIF, the alumni page.
             </p>
           </div>
 

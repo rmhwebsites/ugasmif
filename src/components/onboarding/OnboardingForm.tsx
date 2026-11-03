@@ -2,13 +2,15 @@
 
 // First-run onboarding form. The photo goes through <AvatarUpload>, straight
 // from the browser to Supabase Storage, and the resulting URL is saved with
-// the rest of the details in one request.
+// the rest of the details in one request. The LinkedIn link is optional; it
+// shows on their profile, their Team card and, later, the alumni page.
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AvatarUpload } from "@/components/ui/AvatarUpload";
 import { Button } from "@/components/ui/Button";
 import { SmifSpinner } from "@/components/ui/SmifSpinner";
+import { normalizeLinkedIn } from "@/lib/alumni";
 
 export interface SectorPicker {
   membershipId: string;
@@ -31,6 +33,7 @@ export function OnboardingForm({
   initialFirstName,
   initialLastName,
   initialPhone,
+  initialLinkedin = "",
   initialAvatarUrl,
   userId,
   pickers,
@@ -40,6 +43,7 @@ export function OnboardingForm({
   initialFirstName: string;
   initialLastName: string;
   initialPhone: string;
+  initialLinkedin?: string;
   initialAvatarUrl: string | null;
   userId: string;
   pickers: SectorPicker[];
@@ -50,6 +54,7 @@ export function OnboardingForm({
   const [firstName, setFirstName] = useState(initialFirstName);
   const [lastName, setLastName] = useState(initialLastName);
   const [phone, setPhone] = useState(initialPhone);
+  const [linkedin, setLinkedin] = useState(initialLinkedin);
   const [sectorIds, setSectorIds] = useState<Record<string, string>>(
     Object.fromEntries(pickers.map((p) => [p.membershipId, p.currentSectorId ?? ""]))
   );
@@ -65,6 +70,11 @@ export function OnboardingForm({
       setError("First and last name are both required.");
       return;
     }
+    const checked = normalizeLinkedIn(linkedin);
+    if ("error" in checked) {
+      setError(checked.error);
+      return;
+    }
     setSaving(true);
     const res = await fetch("/api/onboarding", {
       method: "POST",
@@ -73,6 +83,7 @@ export function OnboardingForm({
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone: phone.trim() || null,
+        linkedin_url: checked.url,
         avatar_url: avatarUrl,
         sectors: pickers
           .map((p) => ({
@@ -161,6 +172,27 @@ export function OnboardingForm({
           className={inputClass}
           placeholder="706-555-0100"
         />
+      </div>
+
+      <div>
+        <label className={labelClass} htmlFor="linkedin">
+          LinkedIn profile
+        </label>
+        <input
+          id="linkedin"
+          type="text"
+          inputMode="url"
+          autoComplete="url"
+          maxLength={500}
+          value={linkedin}
+          onChange={(e) => setLinkedin(e.target.value)}
+          className={inputClass}
+          placeholder="https://www.linkedin.com/in/your-name"
+        />
+        <p className="mt-1 text-xs text-muted">
+          Optional. Paste the link to your profile so other members can find
+          you.
+        </p>
       </div>
 
       {pickers.map((p) => (

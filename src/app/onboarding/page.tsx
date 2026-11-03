@@ -75,6 +75,7 @@ export default async function OnboardingPage({
           initialFirstName={profile.first_name ?? ""}
           initialLastName={profile.last_name ?? ""}
           initialPhone={profile.phone ?? ""}
+          initialLinkedin={profile.linkedin_url ?? ""}
           initialAvatarUrl={profile.avatar_url}
           userId={user.id}
           pickers={pickers}

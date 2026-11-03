@@ -8,6 +8,7 @@ import { z } from "zod";
 import { getAuthState } from "@/lib/fund";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
+import { normalizeLinkedIn } from "@/lib/alumni";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,8 @@ const bodySchema = z.object({
   first_name: z.string().trim().min(1).max(60),
   last_name: z.string().trim().min(1).max(60),
   phone: z.string().trim().max(30).optional().nullable(),
+  // Anything pasted; cleaned up to https://www.linkedin.com/in/... below.
+  linkedin_url: z.string().max(500).optional().nullable(),
   avatar_url: z.string().url().max(500).optional().nullable(),
   sectors: z
     .array(
@@ -60,6 +63,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const linkedin =
+    body.linkedin_url === undefined ? null : normalizeLinkedIn(body.linkedin_url ?? "");
+  if (linkedin && "error" in linkedin) {
+    return NextResponse.json({ error: linkedin.error }, { status: 400 });
+  }
+
   const supabase = await createSupabaseServerClient();
 
   const fullName = `${body.first_name} ${body.last_name}`.trim();
@@ -71,6 +80,7 @@ export async function POST(request: NextRequest) {
       full_name: fullName,
       phone: body.phone ?? null,
       ...(body.avatar_url ? { avatar_url: body.avatar_url } : {}),
+      ...(linkedin ? { linkedin_url: linkedin.url } : {}),
       onboarded_at: new Date().toISOString(),
     })
     .eq("id", user.id);
@@ -101,6 +111,7 @@ export async function POST(request: NextRequest) {
       full_name: fullName,
       has_phone: Boolean(body.phone),
       has_avatar: Boolean(body.avatar_url),
+      has_linkedin: Boolean(linkedin && "url" in linkedin && linkedin.url),
       sectors_set: body.sectors.length,
     },
   });

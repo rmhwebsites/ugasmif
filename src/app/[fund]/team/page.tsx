@@ -36,7 +36,7 @@ import { ManageLink, PageHeader } from "@/components/ui/PageHeader";
 export const metadata: Metadata = { title: "Team" };
 
 type MemberRow = Membership & {
-  profiles: Pick<Profile, "full_name" | "email" | "avatar_url"> | null;
+  profiles: Pick<Profile, "full_name" | "email" | "avatar_url" | "linkedin_url"> | null;
 };
 
 /**
@@ -54,6 +54,7 @@ function toCards(
     avatarUrl: m.profiles?.avatar_url ?? null,
     isLeader: m.is_sector_leader,
     href: memberHref ? memberHref(m.id) : undefined,
+    linkedinUrl: m.profiles?.linkedin_url ?? null,
   }));
 }
 
@@ -82,7 +83,7 @@ export default async function TeamPage({
   const [membersRes, sectorsRes] = await Promise.all([
     supabase
       .from("memberships")
-      .select("*, profiles(full_name, email, avatar_url)")
+      .select("*, profiles(full_name, email, avatar_url, linkedin_url)")
       .eq("fund_id", ctx.fund.id)
       .eq("academic_year_id", selectedYear.id)
       .order("created_at"),

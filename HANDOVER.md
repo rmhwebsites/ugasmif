@@ -169,7 +169,10 @@ year rollover takes care of that, so nobody adds alumni by hand. Their
 pitches are the ones their sector took to a vote while they were on it, plus
 any they wrote.
 
-Members add their own LinkedIn link on their profile. For alumni who won't
+Members paste their LinkedIn link when they first sign up (it's optional)
+or add it later on their profile, and it shows as a link on their profile,
+their card on Team and their sector's page, and the alumni page. For alumni
+who won't
 sign in again, the president, vice president, director of alumni relations
 or an app admin can add it: open the person from Team (pick their year) or
 from the alumni page's "Add link", and fill in the Alumni page box. It

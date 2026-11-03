@@ -58,7 +58,7 @@ import type {
 } from "@/types/domain";
 
 type MemberRow = Membership & {
-  profiles: Pick<Profile, "full_name" | "email" | "avatar_url"> | null;
+  profiles: Pick<Profile, "full_name" | "email" | "avatar_url" | "linkedin_url"> | null;
 };
 
 type SnapshotRow = Pick<FundSnapshot, "snapshot_date" | "detail">;
@@ -116,7 +116,7 @@ export default async function SectorWorkspacePage({
     valueFund(supabase, ctx.fund.id),
     supabase
       .from("memberships")
-      .select("*, profiles(full_name, email, avatar_url)")
+      .select("*, profiles(full_name, email, avatar_url, linkedin_url)")
       .eq("fund_id", ctx.fund.id)
       .eq("academic_year_id", ctx.currentYear.id)
       .eq("sector_id", sector.id)
@@ -451,6 +451,7 @@ export default async function SectorWorkspacePage({
               role: roleLabel(m.role, m.title_override),
               avatarUrl: m.profiles?.avatar_url ?? null,
               isLeader: m.is_sector_leader,
+              linkedinUrl: m.profiles?.linkedin_url ?? null,
             }))}
             label={`${sector.name} team`}
           />

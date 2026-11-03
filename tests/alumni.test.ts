@@ -32,7 +32,7 @@ describe("normalizeLinkedIn", () => {
   });
 
   it("refuses anything that isn't a LinkedIn profile", () => {
-    const help = "Use a LinkedIn profile link, like linkedin.com/in/their-name.";
+    const help = "Use a LinkedIn profile link, like linkedin.com/in/jane-doe.";
     expect(normalizeLinkedIn("https://evil.example/linkedin.com/in/x")).toEqual({ error: help });
     expect(normalizeLinkedIn("https://linkedin.com.evil.example/in/x")).toEqual({ error: help });
     expect(normalizeLinkedIn("javascript:alert(1)//linkedin.com/in/x")).toEqual({ error: help });
